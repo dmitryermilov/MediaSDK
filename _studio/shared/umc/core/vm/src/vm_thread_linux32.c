@@ -129,7 +129,6 @@ int32_t vm_thread_attach(vm_thread *thread, vm_thread_callback func, void *arg)
     (void)arg;
 
     int32_t i_res = 1;
-    pthread_attr_t attr;
 
     /* check error(s) */
     if (NULL == thread)
