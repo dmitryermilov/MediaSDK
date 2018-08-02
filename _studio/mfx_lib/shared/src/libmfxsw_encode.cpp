@@ -56,19 +56,6 @@
 #endif
 #endif
 
-
-// declare static file section
-namespace
-{
-
-VideoENCODE* CreateUnsupported(VideoCORE *, mfxStatus *res)
-{
-    *res = MFX_ERR_UNSUPPORTED;
-    return 0;
-}
-
-} // namespace
-
 VideoENCODE *CreateENCODESpecificClass(mfxU32 CodecId, VideoCORE *core, mfxSession session, mfxVideoParam * /* par */)
 {
 #if (!defined(MFX_ENABLE_H264_VIDEO_ENCODE) || !defined(MFX_ENABLE_H264_VIDEO_ENCODE_HW)) && \
