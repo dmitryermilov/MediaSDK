@@ -29,9 +29,20 @@
 
 #include "vm_sys_info.h"
 
-
-
 #include "umc_mpeg2_dec_hw.h"
+
+#include "mfx_common.h"
+#include "mfx_common_decode_int.h"
+
+// ********* new ***************
+#include "umc_new_mpeg2_mfx_supplier.h"
+#include "umc_new_mpeg2_mfx_utils.h"
+#include "umc_new_mpeg2_frame_list.h"
+
+#include "vm_sys_info.h"
+
+#include "umc_new_mpeg2_va_supplier.h"
+// ********* new ***************
 
 enum { MFX_MB_WIDTH = 16 };
 enum { MFX_MB_HEIGHT = 16 };
@@ -659,8 +670,38 @@ mfxStatus VideoDECODEMPEG2::GetPayload( mfxU64 *ts, mfxPayload *payload )
     return MFX_ERR_NONE;
 }
 
-mfxStatus VideoDECODEMPEG2::DecodeHeader(VideoCORE * /*core*/, mfxBitstream* bs, mfxVideoParam* par)
+mfxStatus VideoDECODEMPEG2::DecodeHeader(VideoCORE * core, mfxBitstream* bs, mfxVideoParam* par)
 {
+    MFX_CHECK_NULL_PTR2(bs, par);
+
+    mfxStatus sts = CheckBitstream(bs);
+    if (sts != MFX_ERR_NONE)
+        return sts;
+
+    MFXMediaDataAdapter in(bs);
+
+    mfx_UMC_MemAllocator  tempAllocator;
+    tempAllocator.InitMem(0, core);
+
+    UMC::VideoDecoderParams avcInfo;
+    avcInfo.m_pData = &in;
+
+    MFX_AVC_Decoder_MPEG2 decoder;
+
+    decoder.SetMemoryAllocator(&tempAllocator);
+    UMC::Status umcRes = MFX_Utility::DecodeHeader(&decoder, &avcInfo, bs, par);
+
+    if (umcRes == UMC::UMC_ERR_NOT_ENOUGH_DATA)
+        return MFX_ERR_MORE_DATA;
+    else if (umcRes != UMC::UMC_OK)
+        return ConvertUMCStatusToMfx(umcRes);
+
+    umcRes = decoder.FillVideoParam(par, false);
+    if (umcRes != UMC::UMC_OK)
+        return ConvertUMCStatusToMfx(umcRes);
+
+    return MFX_ERR_NONE;
+/*
     MFX_CHECK_NULL_PTR3(bs,bs->Data,par);
 
     mfxU8* ptr;
@@ -935,6 +976,8 @@ mfxStatus VideoDECODEMPEG2::DecodeHeader(VideoCORE * /*core*/, mfxBitstream* bs,
     }
 
     return MFX_ERR_MORE_DATA;
+*/
+
 }
 
 

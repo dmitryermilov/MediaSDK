@@ -522,7 +522,7 @@ void MPEG2HeadersBitstream::parseProfileTier(MPEG2PTL *ptl)
 
     if (!ptl->profile_idc)
     {
-        ptl->profile_idc = MPEG2_PROFILE_MAIN;
+        ptl->profile_idc = MPEG2_PROFILE_MAIN_NEW;
         for(int j = 1; j < 32; j++)
         {
             if (ptl->profile_compatibility_flags & (1 << j))
