@@ -50,6 +50,25 @@
 #define NO_SURFACE_TO_UNLOCK -1
 #define NO_TASK_TO_UNLOCK -1
 
+// ********* new ***************
+namespace UMC
+{
+    class VideoData;
+}
+
+namespace UMC_MPEG2_DECODER
+{
+    class MFXTaskSupplier_MPEG2;
+    class VATaskSupplier;
+    class MPEG2DecoderFrame;
+}
+
+using namespace UMC_MPEG2_DECODER;
+
+typedef UMC_MPEG2_DECODER::VATaskSupplier MFX_AVC_Decoder_MPEG2;
+
+// ********* new ***************
+
 enum
 {
     MINIMAL_BITSTREAM_LENGTH    = 4,
