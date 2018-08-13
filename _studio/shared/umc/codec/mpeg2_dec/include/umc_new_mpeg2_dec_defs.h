@@ -215,7 +215,28 @@ enum NalUnitType
   NAL_UT_SEI                    = 39, // Prefix SEI
   NAL_UT_SEI_SUFFIX             = 40, // Suffix SEI
 
-  NAL_UT_INVALID = 64
+  NAL_UT_INVALID = 64,
+
+  NAL_UT_PICTURE_HEADER  = 0x00,
+  NAL_UT_USER_DATA       = 0xb2,
+  NAL_UT_SEQUENCE_HEADER = 0xb3,
+  NAL_UT_SEQUENCE_ERROR  = 0xb4,
+  NAL_UT_EXTENSION       = 0xb5,
+  NAL_UT_SEQUENCE_END    = 0xb7,
+  NAL_UT_GROUP           = 0xb8,
+};
+
+enum NalUnitTypeExt
+{
+  NAL_UT_EXT_SEQUENCE_EXTENSION                  = 1,
+  NAL_UT_EXT_SEQUENCE_DISPLAY_EXTENSION          = 2,
+  NAL_UT_EXT_QUANT_MATRIX_EXTENSION              = 3,
+  NAL_UT_EXT_COPYRIGHT_EXTENSION                 = 4,
+  NAL_UT_EXT_SEQUENCE_SCALABLE_EXTENSION         = 5,
+  NAL_UT_EXT_PICTURE_DISPLAY_EXTENSION           = 7,
+  NAL_UT_EXT_PICTURE_CODING_EXTENSION            = 8,
+  NAL_UT_EXT_PICTURE_SPARTIAL_SCALABLE_EXTENSION = 9,
+  NAL_UT_EXT_PICTURE_TEMPORAL_SCALABLE_EXTENSION = 10,
 };
 
 // Slice types
@@ -1336,6 +1357,144 @@ public:
         prevPicOrderCntMsb = 0;
     }
 };
+
+/*********************MPEG2*********************/
+
+// Sequence header
+struct MPEG2SequenceHeaderBase
+{
+    uint32_t  horizontal_size_value;
+    uint32_t  vertical_size_value;
+    uint32_t  aspect_ratio_information;
+    uint32_t  frame_rate_code;
+    uint32_t  bit_rate_value;
+    uint32_t  vbv_buffer_size_value;
+    uint8_t   constrained_parameters_flag;
+    uint8_t   load_intra_quantiser_matrix;
+    uint8_t   intra_quantiser_matrix[64];
+    uint8_t   load_non_intra_quantiser_matrix;
+    uint8_t   non_intra_quantiser_matrix[64];
+
+    void Reset()
+    {
+        MPEG2SequenceHeaderBase s = {};
+        *this = s;
+    }
+};
+
+struct MPEG2SequenceHeader : public HeapObject, public MPEG2SequenceHeaderBase
+{
+
+    MPEG2SequenceHeader()
+        : MPEG2SequenceHeaderBase()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        MPEG2SequenceHeaderBase::Reset();
+    }
+
+    ~MPEG2SequenceHeader()
+    {
+    }
+
+    int32_t GetID() const
+    {
+        return 0;
+    }
+};
+
+// Sequence extension
+struct MPEG2SequenceExtensionBase
+{
+    uint8_t   profile_and_level_indication;
+    uint8_t   progressive_sequence;
+    uint8_t   chroma_format;
+    uint8_t   frame_rate_code;
+    uint8_t   horizontal_size_extension;
+    uint8_t   vertical_size_extension;
+    uint32_t  bit_rate_extension;
+    uint32_t  vbv_buffer_size_extension;
+    uint8_t   low_delay;
+    uint8_t   frame_rate_extension_n;
+    uint8_t   frame_rate_extension_d;
+
+    void Reset()
+    {
+        MPEG2SequenceExtensionBase s = {};
+        *this = s;
+    }
+};
+
+struct MPEG2SequenceExtension : public HeapObject, public MPEG2SequenceExtensionBase
+{
+
+    MPEG2SequenceExtension()
+        : MPEG2SequenceExtensionBase()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        MPEG2SequenceExtensionBase::Reset();
+    }
+
+    ~MPEG2SequenceExtension()
+    {
+    }
+
+    int32_t GetID() const
+    {
+        return 0;
+    }
+};
+
+// Sequence display extension
+struct MPEG2SequenceDisplayExtensionBase
+{
+    uint8_t   video_format;
+    uint8_t   colour_description;
+    uint8_t   colour_primaries;
+    uint8_t   transfer_characteristics;
+    uint8_t   matrix_coefficients;
+    uint16_t  display_horizontal_size;
+    uint16_t  display_vertical_size;
+
+    void Reset()
+    {
+        MPEG2SequenceDisplayExtensionBase s = {};
+        *this = s;
+    }
+};
+
+struct MPEG2SequenceDisplayExtension : public HeapObject, public MPEG2SequenceDisplayExtensionBase
+{
+
+    MPEG2SequenceDisplayExtension()
+        : MPEG2SequenceDisplayExtensionBase()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        MPEG2SequenceDisplayExtensionBase::Reset();
+    }
+
+    ~MPEG2SequenceDisplayExtension()
+    {
+    }
+
+    int32_t GetID() const
+    {
+        return 0;
+    }
+};
+
+/*********************MPEG2*********************/
 
 // Error exception
 class mpeg2_exception

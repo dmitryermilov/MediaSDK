@@ -257,6 +257,94 @@ void MPEG2HeadersBitstream::parseHrdParameters(MPEG2HRD *hrd, uint8_t cprms_pres
     }
 }
 
+/*********************************MPEG2******************************************/
+
+void MPEG2HeadersBitstream::GetSequenceHeader(MPEG2SequenceHeader *seq)
+{
+    if (!seq)
+        throw mpeg2_exception(UMC::UMC_ERR_NULL_PTR);
+
+    // 6.2.2.1 Sequence header
+    seq->horizontal_size_value = GetBits(12);
+    seq->vertical_size_value = GetBits(12);
+    seq->aspect_ratio_information = GetBits(4);
+    if (0 == seq->aspect_ratio_information || seq->aspect_ratio_information > 4)
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    seq->frame_rate_code = GetBits(4);
+    seq->bit_rate_value = GetBits(18);
+    uint8_t marker_bit = GetBits(1);
+    if (0 == marker_bit) // shall be '1'. This bit prevents emulation of start codes.
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    seq->vbv_buffer_size_value = GetBits(10);
+    seq->constrained_parameters_flag = GetBits(1);
+    seq->load_intra_quantiser_matrix = GetBits(1);
+    if (seq->load_intra_quantiser_matrix)
+    {
+        for (uint32_t i = 0; i < 64; ++i)
+            seq->intra_quantiser_matrix[i] = GetBits(8);
+    }
+    seq->load_non_intra_quantiser_matrix = GetBits(1);
+    if (seq->load_non_intra_quantiser_matrix)
+    {
+        for (uint32_t i = 0; i < 64; ++i)
+            seq->non_intra_quantiser_matrix[i] = GetBits(8);
+    }
+}
+
+void MPEG2HeadersBitstream::GetSequenceExtension(MPEG2SequenceExtension *seqExt)
+{
+    if (!seqExt)
+        throw mpeg2_exception(UMC::UMC_ERR_NULL_PTR);
+
+    // 6.2.2.3 Sequence extension
+    seqExt->profile_and_level_indication = GetBits(8);
+    seqExt->progressive_sequence = GetBits(1);
+    seqExt->chroma_format = GetBits(2);
+    if (0 == seqExt->chroma_format)
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    seqExt->horizontal_size_extension = GetBits(2);
+    seqExt->vertical_size_extension = GetBits(2);
+    seqExt->bit_rate_extension = GetBits(12);
+
+    uint8_t marker_bit = GetBits(1);
+    if (0 == marker_bit) // shall be '1'. This bit prevents emulation of start codes.
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    seqExt->vbv_buffer_size_extension = GetBits(8);
+    seqExt->low_delay = GetBits(1);
+    seqExt->frame_rate_extension_n = GetBits(2);
+    seqExt->frame_rate_extension_d = GetBits(5);
+}
+
+void MPEG2HeadersBitstream::GetSequenceDisplayExtension(MPEG2SequenceDisplayExtension *dispExt)
+{
+    if (!dispExt)
+        throw mpeg2_exception(UMC::UMC_ERR_NULL_PTR);
+
+    // 6.2.2.4 Sequence display extension
+    dispExt->video_format = GetBits(3);
+    dispExt->colour_description = GetBits(1);
+    if (dispExt->colour_description)
+    {
+        dispExt->colour_primaries = GetBits(8);
+        dispExt->transfer_characteristics = GetBits(8);
+        dispExt->matrix_coefficients = GetBits(8);
+    }
+
+    dispExt->display_horizontal_size = GetBits(14);
+
+    uint8_t marker_bit = Get1Bit();
+    if (0 == marker_bit) // shall be '1'. This bit prevents emulation of start codes.
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    dispExt->display_vertical_size = GetBits(14);
+}
+
+/*********************************MPEG2******************************************/
+
 // Part VPS header
 UMC::Status MPEG2HeadersBitstream::GetVideoParamSet(MPEG2VideoParamSet *pcVPS)
 {
