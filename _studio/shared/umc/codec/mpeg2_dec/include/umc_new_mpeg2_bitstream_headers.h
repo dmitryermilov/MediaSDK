@@ -293,6 +293,11 @@ public:
     // Read and return NAL unit type and NAL storage idc.
     // Bitstream position is expected to be at the start of a NAL unit.
     UMC::Status GetNALUnitType(NalUnitType &nal_unit_type, uint32_t &nuh_temporal_id);
+
+    // Read and return a header type.
+    // Bitstream position is expected to be at the start of a NAL unit.
+    UMC::Status GetNALUnitType(NalUnitType &nal_unit_type);
+
     // Read optional access unit delimiter from bitstream.
     UMC::Status GetAccessUnitDelimiter(uint32_t &PicCodType);
 
@@ -311,6 +316,16 @@ public:
     // Reserved for future header extensions
     bool MoreRbspData();
 
+/*********************************MPEG2******************************************/
+    // Parse sequence header
+    void GetSequenceHeader(MPEG2SequenceHeader *seq);
+
+    // Parse sequence extension
+    void GetSequenceExtension(MPEG2SequenceExtension *seqExt);
+
+    // Parse sequence display extension
+    void GetSequenceDisplayExtension(MPEG2SequenceDisplayExtension *dispExt);
+/*********************************MPEG2******************************************/
     // Part VPS header
     UMC::Status GetVideoParamSet(MPEG2VideoParamSet *vps);
 
