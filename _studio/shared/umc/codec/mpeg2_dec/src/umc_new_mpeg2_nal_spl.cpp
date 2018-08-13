@@ -36,7 +36,6 @@ enum
 // Change memory region to little endian for reading with 32-bit DWORDs and remove start code emulation prevention byteps
 void SwapMemoryAndRemovePreventingBytes_MPEG2(void *pDestination, size_t &nDstSize, void *pSource, size_t nSrcSize, std::vector<uint32_t> *pRemovedOffsets);
 
-static const uint8_t start_code_prefix[] = {0, 0, 0, 1};
 
 // Search bitstream for start code
 static int32_t FindStartCode(const uint8_t *pb, size_t &nSize)
@@ -289,7 +288,7 @@ private:
     double   m_pts;
 
     // Searches NAL unit start code, places input pointer to it and fills up size paramters
-    // ML: OPT: TODO: Replace with MaxL's fast start code search
+    // TODO: Rewrite considering that MPEG2 has only 3-bytes start codes
     int32_t FindStartCode(uint8_t * (&pb), size_t & size, int32_t & startCodeSize)
     {
         uint32_t zeroCount = 0;
@@ -327,12 +326,12 @@ private:
 
             if (zeroCount >= 2 && pb[0] == 1)
             {
-                startCodeSize = MFX_MIN(zeroCount + 1, 4);
+                startCodeSize = MFX_MIN(zeroCount + 1, 3);
                 size -= i + 1;
                 pb++; // remove 0x01 symbol
                 if (size >= 1)
                 {
-                    return (pb[0] & NAL_UNITTYPE_BITS_MPEG2) >> NAL_UNITTYPE_SHIFT_MPEG2;
+                    return pb[0];
                 }
                 else
                 {
@@ -366,6 +365,7 @@ private:
         startCodeSize = zeroCount;
         return -1;
     }
+
 };
 
 // Memory big-to-little endian converter implementation
