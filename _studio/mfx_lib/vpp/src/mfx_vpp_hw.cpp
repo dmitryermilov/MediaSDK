@@ -2260,6 +2260,7 @@ mfxStatus  VideoVPPHW::Init(
             eMFXHWType m_platform = m_pCore->GetHWType();
             switch (m_platform)
             {
+#ifdef MFX_ENABLE_KERNELS
             case MFX_HW_BDW:
             case MFX_HW_CHT:
                 res = m_pCmDevice->LoadProgram((void*)genx_fcopy_gen8,sizeof(genx_fcopy_gen8),m_pCmProgram,"nojitter");
@@ -2270,6 +2271,16 @@ mfxStatus  VideoVPPHW::Init(
             case MFX_HW_CFL:
                 res = m_pCmDevice->LoadProgram((void*)genx_fcopy_gen9,sizeof(genx_fcopy_gen9),m_pCmProgram,"nojitter");
                 break;
+            case MFX_HW_CNL:
+                res = m_pCmDevice->LoadProgram((void*)genx_fcopy_gen10,sizeof(genx_fcopy_gen10),m_pCmProgram,"nojitter");
+                break;
+            case MFX_HW_ICL:
+                res = m_pCmDevice->LoadProgram((void*)genx_fcopy_gen11,sizeof(genx_fcopy_gen11),m_pCmProgram,"nojitter");
+                break;
+            case MFX_HW_ICL_LP:
+                res = m_pCmDevice->LoadProgram((void*)genx_fcopy_gen11lp,sizeof(genx_fcopy_gen11lp),m_pCmProgram,"nojitter");
+                break;
+#endif
             default:
                 res = CM_FAILURE;
                 break;
@@ -2661,6 +2672,20 @@ mfxStatus VideoVPPHW::Reset(mfxVideoParam *par)
     if ( fabs(inFrameRateCur / outFrameRateCur - inFrameRate / outFrameRate) > std::numeric_limits<mfxF64>::epsilon() )
         return MFX_ERR_INCOMPATIBLE_VIDEO_PARAM; // Frame Rate ratio check
 
+#if (MFX_VERSION >= 1027)
+    eMFXPlatform platform = m_pCore->GetPlatformType();
+    if (platform == MFX_PLATFORM_HARDWARE)
+    {
+        eMFXHWType type = m_pCore->GetHWType();
+        if (type < MFX_HW_ICL &&
+           (par->vpp.In.FourCC   == MFX_FOURCC_Y210 ||
+            par->vpp.In.FourCC   == MFX_FOURCC_Y410 ||
+            par->vpp.Out.FourCC  == MFX_FOURCC_Y210 ||
+            par->vpp.Out.FourCC  == MFX_FOURCC_Y410))
+            return MFX_ERR_INVALID_VIDEO_PARAM;
+
+    }
+#endif
 
     if (m_params.vpp.In.FourCC  != par->vpp.In.FourCC ||
         m_params.vpp.Out.FourCC != par->vpp.Out.FourCC)
@@ -4183,7 +4208,6 @@ mfxStatus VideoVPPHW::SyncTaskSubmission(DdiTask* pTask)
     deinterlaceAlgorithm = m_executeParams.iDeinterlacingAlgorithm;
     FMDEnable = m_executeParams.bFMDEnable;
 
-    static mfxU32 num_progressive = 0;
     mfxU32 currFramePicStruct = m_executeSurf[pTask->bkwdRefCount].frameInfo.PicStruct;
     mfxU32 refFramePicStruct = m_executeSurf[0].frameInfo.PicStruct;
     bool isFirstField = true;
@@ -4774,6 +4798,10 @@ mfxStatus ValidateParams(mfxVideoParam *par, mfxVppCaps *caps, VideoCORE *core, 
 
     /* 6. BitDepthLuma and BitDepthChroma should be configured for p010 format */
     if (MFX_FOURCC_P010 == par->vpp.In.FourCC
+#if (MFX_VERSION >= 1027)
+        || par->vpp.In.FourCC == MFX_FOURCC_Y210
+        || par->vpp.In.FourCC == MFX_FOURCC_Y410
+#endif
         )
     {
         if (0 == par->vpp.In.BitDepthLuma)
@@ -4789,6 +4817,10 @@ mfxStatus ValidateParams(mfxVideoParam *par, mfxVppCaps *caps, VideoCORE *core, 
     }
 
     if (MFX_FOURCC_P010 == par->vpp.Out.FourCC
+#if (MFX_VERSION >= 1027)
+        || par->vpp.Out.FourCC == MFX_FOURCC_Y210
+        || par->vpp.Out.FourCC == MFX_FOURCC_Y410
+#endif
         )
     {
         if (0 == par->vpp.Out.BitDepthLuma)
@@ -5095,6 +5127,10 @@ mfxStatus ConfigureExecuteParams(
         def_back_color = make_def_back_color_yuv(8);
     }
     else if(videoParam.vpp.Out.FourCC == MFX_FOURCC_P010 ||
+#if (MFX_VERSION >= 1027)
+            videoParam.vpp.Out.FourCC == MFX_FOURCC_Y210 ||
+            videoParam.vpp.Out.FourCC == MFX_FOURCC_Y410 ||
+#endif
             videoParam.vpp.Out.FourCC == MFX_FOURCC_P210)
     {
         def_back_color = make_def_back_color_yuv(10);
@@ -5597,6 +5633,10 @@ mfxStatus ConfigureExecuteParams(
                             executeParams.iBackgroundColor = make_back_color_yuv(8, extComp->Y, extComp->U, extComp->V);
                         }
                         if (targetFourCC == MFX_FOURCC_P010 ||
+#if (MFX_VERSION >= 1027)
+                            targetFourCC == MFX_FOURCC_Y210 ||
+                            targetFourCC == MFX_FOURCC_Y410 ||
+#endif
                             targetFourCC == MFX_FOURCC_P210)
                         {
                             executeParams.iBackgroundColor = make_back_color_yuv(10, extComp->Y, extComp->U, extComp->V);

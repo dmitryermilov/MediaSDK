@@ -88,7 +88,6 @@ VAAPIVideoProcessing::VAAPIVideoProcessing():
 , m_procampFilterID(VA_INVALID_ID)
 , m_frcFilterID(VA_INVALID_ID)
 , m_deintFrameCount(0)
-, m_bFakeOutputEnabled(false)
 , m_frcCyclicCounter(0)
 , m_numFilterBufs(0)
 , m_primarySurface4Composition(NULL)
@@ -407,13 +406,13 @@ mfxStatus VAAPIVideoProcessing::QueryCapabilities(mfxVppCaps& caps)
         }
     }
 
-#ifdef MFX_ENABLE_VPP_ROTATION
     memset(&m_pipelineCaps,  0, sizeof(VAProcPipelineCaps));
     vaSts = vaQueryVideoProcPipelineCaps(m_vaDisplay,
                                  m_vaContextVPP,
                                  NULL,
                                  0,
                                  &m_pipelineCaps);
+#ifdef MFX_ENABLE_VPP_ROTATION
     MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
     if (m_pipelineCaps.rotation_flags & (1 << VA_ROTATION_90 ) &&
         m_pipelineCaps.rotation_flags & (1 << VA_ROTATION_180) &&
@@ -423,40 +422,66 @@ mfxStatus VAAPIVideoProcessing::QueryCapabilities(mfxVppCaps& caps)
     }
 #endif
 
-    /* NB! The code below should to be replaced with querying caps from driver*/
-#if defined(LINUX_TARGET_PLATFORM_BXTMIN) || defined(LINUX_TARGET_PLATFORM_BXT)
-    caps.uMaxWidth  = 8192;
-    caps.uMaxHeight = 8192;
-#else
-    caps.uMaxWidth  = 4096;
-    caps.uMaxHeight = 4096;
-#endif
+    if (m_pipelineCaps.max_output_width && m_pipelineCaps.max_output_height)
+    {
+        caps.uMaxWidth = m_pipelineCaps.max_output_width;
+        caps.uMaxHeight = m_pipelineCaps.max_output_height;
+    }
+    else
+    {
+        caps.uMaxWidth = 4096;
+        caps.uMaxHeight = 4096;
+    }
 
     caps.uFieldWeavingControl = 1;
 
     // [FourCC]
     // should be changed by libva support
-    for (mfxU32 indx = 0; indx < sizeof(g_TABLE_SUPPORTED_FOURCC)/sizeof(mfxU32); indx++)
+    for (auto fourcc : g_TABLE_SUPPORTED_FOURCC)
     {
-        if (MFX_FOURCC_NV12   == g_TABLE_SUPPORTED_FOURCC[indx] ||
-            MFX_FOURCC_YV12   == g_TABLE_SUPPORTED_FOURCC[indx] ||
-            MFX_FOURCC_YUY2   == g_TABLE_SUPPORTED_FOURCC[indx] ||
-            MFX_FOURCC_UYVY   == g_TABLE_SUPPORTED_FOURCC[indx] ||
-            MFX_FOURCC_RGB4   == g_TABLE_SUPPORTED_FOURCC[indx] ||
-#if (MFX_VERSION >= MFX_VERSION_NEXT)
-            MFX_FOURCC_RGB565 == g_TABLE_SUPPORTED_FOURCC[indx] ||
+        // Mark supported input
+        switch(fourcc)
+        {
+        case MFX_FOURCC_NV12:
+        case MFX_FOURCC_YV12:
+        case MFX_FOURCC_YUY2:
+        case MFX_FOURCC_UYVY:
+        case MFX_FOURCC_RGB4:
+#if defined (MFX_ENABLE_FOURCC_RGB565)
+        case MFX_FOURCC_RGB565:
 #endif
-            MFX_FOURCC_P010   == g_TABLE_SUPPORTED_FOURCC[indx])
-            caps.mFormatSupport[g_TABLE_SUPPORTED_FOURCC[indx]] |= MFX_FORMAT_SUPPORT_INPUT;
+#if (MFX_VERSION >= 1027)
+        case MFX_FOURCC_AYUV:
+        case MFX_FOURCC_Y210:
+        case MFX_FOURCC_Y410:
+#endif
+        case MFX_FOURCC_P010:
+            caps.mFormatSupport[fourcc] |= MFX_FORMAT_SUPPORT_INPUT;
+            break;
+        default:
+            break;
+        }
 
-        if (MFX_FOURCC_NV12    == g_TABLE_SUPPORTED_FOURCC[indx] ||
-            MFX_FOURCC_YUY2    == g_TABLE_SUPPORTED_FOURCC[indx] ||
-            MFX_FOURCC_RGB4    == g_TABLE_SUPPORTED_FOURCC[indx] ||
-#ifdef MFX_ENABLE_RGBP
-            MFX_FOURCC_RGBP    == g_TABLE_SUPPORTED_FOURCC[indx] ||
+        // Mark supported output
+        switch(fourcc)
+        {
+        case MFX_FOURCC_NV12:
+        case MFX_FOURCC_YUY2:
+        case MFX_FOURCC_RGB4:
+#if (MFX_VERSION >= 1027)
+        case MFX_FOURCC_AYUV:
+        case MFX_FOURCC_Y210:
+        case MFX_FOURCC_Y410:
 #endif
-            MFX_FOURCC_A2RGB10 == g_TABLE_SUPPORTED_FOURCC[indx])
-            caps.mFormatSupport[g_TABLE_SUPPORTED_FOURCC[indx]] |= MFX_FORMAT_SUPPORT_OUTPUT;
+#ifdef MFX_ENABLE_RGBP
+        case MFX_FOURCC_RGBP:
+#endif
+        case MFX_FOURCC_P010:
+            caps.mFormatSupport[fourcc] |= MFX_FORMAT_SUPPORT_OUTPUT;
+            break;
+        default:
+            break;
+        }
     }
 
     caps.uMirroring = 1;
@@ -1462,7 +1487,6 @@ mfxStatus VAAPIVideoProcessing::Execute_Composition_TiledVideoWall(mfxExecutePar
     MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_HOTSPOTS, "VAAPIVideoProcessing::Execute_Composition_TiledVideoWall");
 
     VAStatus vaSts = VA_STATUS_SUCCESS;
-    VASurfaceAttrib attrib;
     std::vector<VABlendState> blend_state;
 
     MFX_CHECK_NULL_PTR1( pParams );
@@ -1474,7 +1498,6 @@ mfxStatus VAAPIVideoProcessing::Execute_Composition_TiledVideoWall(mfxExecutePar
     {
         return MFX_ERR_UNKNOWN;
     }
-    mfxU32 SampleCount = 1;
     mfxU32 layerCount = (mfxU32) pParams->fwdRefCount + 1;
 
     std::vector<m_tiledVideoWallParams> tilingParams;
@@ -2021,7 +2044,6 @@ mfxStatus VAAPIVideoProcessing::Execute_Composition(mfxExecuteParams *pParams)
     for( refIdx = 1; refIdx <= (refCount + 1); refIdx++ )
     {
         /*for frames 8, 15, 22, 29,... */
-        unsigned int uLastPass = (refCount + 1) - ( (refIdx /7) *7);
         if ((refIdx != 1) && ((refIdx %7) == 1) )
         {
             {
@@ -2249,8 +2271,6 @@ mfxStatus VAAPIVideoProcessing::Execute_Composition(mfxExecuteParams *pParams)
 
 mfxStatus VAAPIVideoProcessing::QueryTaskStatus(mfxU32 taskIndex)
 {
-    VAStatus vaSts;
-
     VASurfaceID waitSurface = VA_INVALID_SURFACE;
     mfxU32 indxSurf = 0;
 
@@ -2278,7 +2298,7 @@ mfxStatus VAAPIVideoProcessing::QueryTaskStatus(mfxU32 taskIndex)
 #if !defined(ANDROID)
     {
         MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_EXTCALL, "vaSyncSurface");
-        vaSts = vaSyncSurface(m_vaDisplay, waitSurface);
+        VAStatus vaSts = vaSyncSurface(m_vaDisplay, waitSurface);
         if (vaSts == VA_STATUS_ERROR_HW_BUSY)
             return MFX_ERR_GPU_HANG;
         else

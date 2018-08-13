@@ -23,7 +23,7 @@ set(MFX_ORIG_LDFLAGS "${MFX_LDFLAGS}" )
 mfx_include_dirs()
 
 ### ENCODE HW
-list( APPEND Encoders h264 mjpeg mpeg2 )
+list( APPEND Encoders h265 h264 mjpeg mpeg2 )
 foreach( dir ${Encoders} )
   include_directories( ${MSDK_LIB_ROOT}/encode_hw/${dir}/include )
 endforeach()
@@ -34,7 +34,6 @@ include_directories( ${MSDK_LIB_ROOT}/pak/mpeg2/include )
 include_directories( ${MSDK_LIB_ROOT}/genx/h264_encode/include )
 include_directories( ${MSDK_LIB_ROOT}/fei/h264_preenc )
 include_directories( ${MSDK_STUDIO_ROOT}/shared/asc/include )
-include_directories( ${MSDK_STUDIO_ROOT}/hevce_hw/h265/include )
 # umc codec
 include_directories( ${MSDK_UMC_ROOT}/codec/brc/include )
 include_directories( ${MSDK_UMC_ROOT}/codec/jpeg_common/include )
@@ -59,10 +58,6 @@ foreach( prefix ${MSDK_LIB_ROOT}/shared/src )
     )
 endforeach()
 
-set( hevce_hw_dir ${MSDK_STUDIO_ROOT}/hevce_hw/h265/src )
-file( GLOB_RECURSE srcs "${hevce_hw_dir}/*.c" "${hevce_hw_dir}/*.cpp" )
-list( APPEND sources ${srcs} )
-
 make_library( encode hw static )
 
 ### BRC
@@ -72,11 +67,3 @@ set( sources "" )
 file( GLOB_RECURSE srcs "${SRC_DIR}/*.c" "${SRC_DIR}/*.cpp" )
 list( APPEND sources ${srcs})
 make_library( bitrate_control none static )
-
-include_directories( ${MSDK_LIB_ROOT}/genx/h264_encode/include )
-set( SRC_DIR "${MSDK_LIB_ROOT}/genx/h264_encode/src" )
-set( defs "" )
-set( sources "" )
-file( GLOB_RECURSE srcs "${SRC_DIR}/*.c" "${SRC_DIR}/*.cpp" )
-list( APPEND sources ${srcs})
-make_library( genx_h264_encode_embeded none static )

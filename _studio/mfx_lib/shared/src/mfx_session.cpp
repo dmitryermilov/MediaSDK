@@ -601,6 +601,29 @@ void _mfxSession::Clear(void)
 
 void _mfxSession::Cleanup(void)
 {
+    // wait until all task are processed
+    if (m_pScheduler)
+    {
+        if (m_plgGen.get())
+            m_pScheduler->WaitForTaskCompletion(m_plgGen.get());
+        if (m_plgDec.get())
+            m_pScheduler->WaitForTaskCompletion(m_plgDec.get());
+        if (m_pDECODE.get())
+            m_pScheduler->WaitForTaskCompletion(m_pDECODE.get());
+        if (m_plgVPP.get())
+            m_pScheduler->WaitForTaskCompletion(m_plgVPP.get());
+        if (m_pVPP.get())
+            m_pScheduler->WaitForTaskCompletion(m_pVPP.get());
+        if (m_pENC.get())
+            m_pScheduler->WaitForTaskCompletion(m_pENC.get());
+        if (m_pPAK.get())
+            m_pScheduler->WaitForTaskCompletion(m_pPAK.get());
+        if (m_plgEnc.get())
+            m_pScheduler->WaitForTaskCompletion(m_plgEnc.get());
+        if (m_pENCODE.get())
+            m_pScheduler->WaitForTaskCompletion(m_pENCODE.get());
+    }
+
     // unregister plugin before closing
     if (m_plgGen.get())
     {
@@ -687,6 +710,9 @@ mfxStatus _mfxSession::Init(mfxIMPL implInterface, mfxVersion *ver)
 
     // get the number of available threads
     maxNumThreads = vm_sys_info_get_cpu_num();
+    if (maxNumThreads == 1) {
+        maxNumThreads = 2;
+    }
 
     // allocate video core
     if (MFX_PLATFORM_SOFTWARE == m_currentPlatform)
@@ -897,7 +923,13 @@ mfxStatus _mfxSession_1_10::InitEx(mfxInitParam& par)
     }
 
     // get the number of available threads
-    maxNumThreads = (par.ExternalThreads != 0) ? 0 : vm_sys_info_get_cpu_num();
+    maxNumThreads = 0;
+    if (par.ExternalThreads == 0) {
+        maxNumThreads = vm_sys_info_get_cpu_num();
+        if (maxNumThreads == 1) {
+            maxNumThreads = 2;
+        }
+    }
 
     // allocate video core
     if (MFX_PLATFORM_SOFTWARE == m_currentPlatform)

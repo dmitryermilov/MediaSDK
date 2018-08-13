@@ -43,8 +43,6 @@
 
 using namespace MfxHwH264Encode;
 
-static char chFrameType[] = "?IP?B???";
-
 namespace MfxHwH264Encode
 {
     const mfxU32 NUM_CLOCK_TS[9] = { 1, 1, 1, 2, 2, 3, 3, 2, 3 };
@@ -1065,23 +1063,6 @@ namespace
     {
         return mfxU8(std::lower_bound(QSTEP, QSTEP + 52, qstep) - QSTEP);
     }
-
-    mfxU8 QStep2QpFloor(mfxF64 qstep) // QSTEP[qp] <= qstep, return 0<=qp<=51
-    {
-        mfxU8 qp = mfxU8(std::upper_bound(QSTEP, QSTEP + 52, qstep) - QSTEP);
-        return qp > 0 ? qp - 1 : 0;
-    }
-
-    mfxU8 QStep2QpNearest(mfxF64 qstep) // return 0<=qp<=51
-    {
-        mfxU8 qp = QStep2QpFloor(qstep);
-        return (qp == 51 || qstep < (QSTEP[qp] + QSTEP[qp + 1]) / 2) ? qp : qp + 1;
-    }
-
-    mfxF64 Qp2QStep(mfxU32 qp)
-    {
-        return QSTEP[MFX_MIN(51, qp)];
-    }
 }
 
 #ifdef _DEBUG
@@ -1097,8 +1078,6 @@ namespace
 namespace MfxHwH264EncodeHW
 {
     mfxF64 const INTRA_QSTEP_COEFF  = 2.0;
-    mfxF64 const INTRA_MODE_BITCOST = 0.0;
-    mfxF64 const INTER_MODE_BITCOST = 0.0;
     mfxI32 const MAX_QP_CHANGE      = 2;
     mfxF64 const LOG2_64            = 3;
     mfxF64 const MIN_EST_RATE       = 0.3;
@@ -1112,8 +1091,6 @@ namespace MfxHwH264EncodeHW
         1.801, 1.796, 1.682, 1.549, 1.485, 1.439, 1.248, 1.221, 1.133, 1.045, 0.990, 0.987, 0.895,
         0.921, 0.891, 0.887, 0.896, 0.925, 0.917, 0.942, 0.964, 0.997, 1.035, 1.098, 1.170, 1.275
     };
-
-    mfxF64 const DEP_STRENTH        = 2.0;
 
     mfxU8 GetSkippedQp(MbData const & mb)
     {
@@ -2955,7 +2932,7 @@ mfxStatus MfxHwH264Encode::CheckEncodeFrameParam(
         // Check Runtime extension buffers if not buffered frames processing
         if (ctrl != 0 && ctrl->NumExtParam)
         {
-            checkSts = CheckRunTimeExtBuffers(video, ctrl, surface, bs, caps);
+            checkSts = CheckRunTimeExtBuffers(video, ctrl, surface, bs, caps, hwType);
             if (checkSts < MFX_ERR_NONE) { return checkSts; }
         }
         else
@@ -3907,50 +3884,6 @@ bool MfxHwH264Encode::IsSlicePatchNeeded(
         task.m_decRefPicMrk[fieldId].mmco.Size() > 0            || // driver doesn't write dec_ref_pic_marking syntax
         task.m_decRefPicMrk[fieldId].long_term_reference_flag;     // even for idr frames
 }
-
-namespace
-{
-    void ReadUntilGapsInFrameNumValueAllowedFlag(
-        InputBitstream & reader)
-    {
-        mfxU32 profileIdc = reader.GetBits(8);
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBit();
-        reader.GetBits(8);
-        reader.GetUe();
-        if (profileIdc == 100 || profileIdc == 110 || profileIdc == 122 ||
-            profileIdc == 244 || profileIdc ==  44 || profileIdc ==  83 ||
-            profileIdc ==  86 || profileIdc == 118 || profileIdc == 128)
-        {
-            if (reader.GetUe() == 3)
-                reader.GetBit();
-            reader.GetUe();
-            reader.GetUe();
-            reader.GetBit();
-            if (reader.GetBit())
-                assert(0);
-        }
-        reader.GetUe();
-        mfxU32 picOrderCntType = reader.GetUe();
-        if (picOrderCntType == 0)
-        {
-            reader.GetUe();
-        }
-        else if (picOrderCntType == 1)
-        {
-            assert(0);
-        }
-
-        reader.GetUe();
-    }
-}
-
 
 mfxStatus  MfxHwH264Encode::CopyBitstream(VideoCORE           & core,
                                           MfxVideoParam const & video,

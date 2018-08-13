@@ -22,6 +22,11 @@
 #define _MFX_CONFIG_H_
 
 #include "mfxdefs.h"
+#if !defined(ANDROID)
+    // mfxconfig.h is auto-generated file containing mediasdk per-component
+    // enable defines
+    #include "mfxconfig.h"
+#endif
 
 #define CMAPIUPDATE
 #define MFX_ENABLE_VPP_COMPOSITION
@@ -110,12 +115,6 @@
 
         // H265 FEI plugin
 
-        // user plugin for decoder, encoder, and vpp
-        #define MFX_ENABLE_USER_DECODE
-        #define MFX_ENABLE_USER_ENCODE
-        #define MFX_ENABLE_USER_ENC
-        #define MFX_ENABLE_USER_VPP
-
         // aac
         #define MFX_ENABLE_AAC_AUDIO_DECODE
 
@@ -153,8 +152,6 @@
         #undef MFX_ENABLE_SCENE_CHANGE_DETECTION_VPP
         #undef MFX_ENABLE_H264_VIDEO_ENCODE_HW
         #undef MFX_ENABLE_MPEG2_VIDEO_ENCODE_HW
-        #undef MFX_ENABLE_USER_DECODE
-        #undef MFX_ENABLE_USER_ENCODE
         #undef MFX_ENABLE_AAC_AUDIO_DECODE
         #undef MFX_ENABLE_MP3_AUDIO_DECODE
         #undef MFX_ENABLE_H264_VIDEO_FEI_ENCPAK
@@ -194,6 +191,7 @@
 #if MFX_VERSION >= MFX_VERSION_NEXT
     #define MFX_ENABLE_VPP_RUNTIME_HSBC
     #define MFX_ENABLE_RGBP
+	#define MFX_ENABLE_FOURCC_RGB565
 #endif
 
 #endif // _MFX_CONFIG_H_

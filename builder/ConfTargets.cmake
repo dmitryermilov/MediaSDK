@@ -63,3 +63,19 @@ append("-std=c++11" CMAKE_CXX_FLAGS)
   else()
     append("-m${T_ARCH}" CMAKE_CXX_FLAGS)
   endif()
+
+option( MFX_ENABLE_KERNELS "Build with advanced media kernels support?" ON )
+
+if (DEFINED MFX_CONFIG_FILE)
+    # Include user provided cmake config file of the format:
+    # set( VARIABLE VALUE )
+    include(${MFX_CONFIG_FILE})
+endif()
+
+option( MFX_ENABLE_USER_DECODE "Enabled user decode plugins?" ON)
+option( MFX_ENABLE_USER_ENCODE "Enabled user encode plugins?" ON)
+option( MFX_ENABLE_USER_ENC "Enabled user ENC plugins?" ON)
+option( MFX_ENABLE_USER_VPP "Enabled user VPP plugins?" ON)
+
+configure_file(mfxconfig.h.in mfxconfig.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})

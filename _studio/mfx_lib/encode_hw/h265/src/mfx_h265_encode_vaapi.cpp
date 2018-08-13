@@ -30,12 +30,51 @@
 #include "mfx_common_int.h"
 #include "mfx_h265_encode_vaapi.h"
 #include "mfx_h265_encode_hw_utils.h"
+#include <unordered_map>
 
 #define MFX_CHECK_WITH_ASSERT(EXPR, ERR) { assert(EXPR); MFX_CHECK(EXPR, ERR); }
 //#define PARALLEL_BRC_support
 
 namespace MfxHwH265Encode
 {
+
+struct VAParameters
+{
+    VAParameters():
+        profile(VAProfileNone), entrypoint(VAEntrypointEncSlice)
+    {}
+
+    VAParameters(VAProfile p, VAEntrypoint e) :
+        profile(p), entrypoint(e)
+    {}
+
+    VAProfile profile;
+    VAEntrypoint entrypoint;
+};
+
+class GUIDhash
+{
+public:
+    size_t operator()(const GUID &guid) const
+    {
+        return guid.GetHashCode();
+    }
+};
+
+static const std::unordered_map<GUID, VAParameters, GUIDhash> GUID2VAParam = {
+    { DXVA2_Intel_Encode_HEVC_Main,                   VAParameters(VAProfileHEVCMain,       VAEntrypointEncSlice)},
+    { DXVA2_Intel_Encode_HEVC_Main10,                 VAParameters(VAProfileHEVCMain10,     VAEntrypointEncSlice)},
+    { DXVA2_Intel_LowpowerEncode_HEVC_Main,           VAParameters(VAProfileHEVCMain,       VAEntrypointEncSliceLP)},
+    { DXVA2_Intel_LowpowerEncode_HEVC_Main10,         VAParameters(VAProfileHEVCMain10,     VAEntrypointEncSliceLP)},
+    { DXVA2_Intel_Encode_HEVC_Main422,                VAParameters(VAProfileHEVCMain422_10, VAEntrypointEncSlice)}, // Unsupported by VA
+    { DXVA2_Intel_Encode_HEVC_Main422_10,             VAParameters(VAProfileHEVCMain422_10, VAEntrypointEncSlice)},
+    { DXVA2_Intel_Encode_HEVC_Main444,                VAParameters(VAProfileHEVCMain444,    VAEntrypointEncSlice)},
+    { DXVA2_Intel_Encode_HEVC_Main444_10,             VAParameters(VAProfileHEVCMain444_10, VAEntrypointEncSlice)},
+    { DXVA2_Intel_LowpowerEncode_HEVC_Main422,        VAParameters(VAProfileHEVCMain422_10,  VAEntrypointEncSliceLP)}, // Unsupported by VA
+    { DXVA2_Intel_LowpowerEncode_HEVC_Main422_10,     VAParameters(VAProfileHEVCMain422_10, VAEntrypointEncSliceLP)},
+    { DXVA2_Intel_LowpowerEncode_HEVC_Main444,        VAParameters(VAProfileHEVCMain444,    VAEntrypointEncSliceLP)},
+    { DXVA2_Intel_LowpowerEncode_HEVC_Main444_10,     VAParameters(VAProfileHEVCMain444_10, VAEntrypointEncSliceLP)},
+};
 
 static mfxStatus SetROI(
                 Task const & task,
@@ -221,15 +260,6 @@ mfxU8 ConvertRateControlMFX2VAAPI(mfxU8 rateControl, bool bSWBRC)
         case MFX_RATECONTROL_ICQ:    return VA_RC_ICQ | VA_RC_MB;
         case MFX_RATECONTROL_VCM:    return VA_RC_VCM | VA_RC_MB;
         default: assert(!"Unsupported RateControl"); return 0;
-    }
-}
-
-VAProfile ConvertProfileTypeMFX2VAAPI(mfxU32 type)
-{
-    switch (type)
-    {
-        case MFX_PROFILE_HEVC_MAIN:  return VAProfileHEVCMain;
-        default: return VAProfileHEVCMain;
     }
 }
 
@@ -707,7 +737,7 @@ static VAConfigAttrib createVAConfigAttrib(VAConfigAttribType type, unsigned int
 
 mfxStatus VAAPIEncoder::CreateAuxilliaryDevice(
     MFXCoreInterface * core,
-    GUID /*guid*/,
+    GUID guid,
     mfxU32 width,
     mfxU32 height)
 {
@@ -744,34 +774,58 @@ mfxStatus VAAPIEncoder::CreateAuxilliaryDevice(
         idx_map[ attr_types[i] ] = i;
     }
 
+    VAParameters vaParams;
+    try { vaParams = GUID2VAParam.at(guid); }
+    catch (std::out_of_range&) { return MFX_ERR_DEVICE_FAILED; }
+
     VAStatus vaSts = vaGetConfigAttributes(m_vaDisplay,
-                          ConvertProfileTypeMFX2VAAPI(m_videoParam.mfx.CodecProfile),
-                          GetVAEntryPoint(),
+                          vaParams.profile,
+                          vaParams.entrypoint,
                           Begin(attrs), attrs.size());
     MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
 
 #if MFX_VERSION >= 1022
+    mfxPlatform p = {};
+
+    sts = m_core->QueryPlatform(&p);
+    MFX_CHECK_STS(sts);
+
+    if (p.CodeName >= MFX_PLATFORM_SKYLAKE)
     {
-        mfxPlatform p = {};
-
-        sts = m_core->QueryPlatform(&p);
-        MFX_CHECK_STS(sts);
-
-        if (p.CodeName >= MFX_PLATFORM_SKYLAKE)
-        {
-            m_caps.Color420Only       = 1;
-            m_caps.BitDepth8Only      = 1;
-            m_caps.MaxEncodedBitDepth = 0;
-            m_caps.YUV422ReconSupport = 0;
-            m_caps.YUV444ReconSupport = 0;
-        }
-        if (p.CodeName >= MFX_PLATFORM_KABYLAKE)
-        {
-            m_caps.BitDepth8Only      = 0;
-            m_caps.MaxEncodedBitDepth = 1;
-        }
+        m_caps.Color420Only       = 1;
+        m_caps.BitDepth8Only      = 1;
+        m_caps.MaxEncodedBitDepth = 0;
+        m_caps.YUV422ReconSupport = 0;
+        m_caps.YUV444ReconSupport = 0;
     }
+    if (p.CodeName >= MFX_PLATFORM_KABYLAKE)
+    {
+        m_caps.BitDepth8Only      = 0;
+        m_caps.MaxEncodedBitDepth = 1;
+    }
+    if (p.CodeName >= MFX_PLATFORM_ICELAKE)
+    {
+        m_caps.Color420Only = 0;
+        m_caps.YUV422ReconSupport = 1;
+        m_caps.YUV444ReconSupport = 1;
+    }
+    if (p.CodeName >= MFX_PLATFORM_CANNONLAKE)
+    {
+        if(IsOn(m_videoParam.mfx.LowPower)) //CNL + VDENC => LCUSizeSupported = 4
+        {
+            m_caps.LCUSizeSupported = (64 >> 4);
+        }
+        else //CNL + VME => LCUSizeSupported = 6
+        {
+            m_caps.LCUSizeSupported = (32 >> 4) | (64 >> 4);
+        }
+    } else
 #endif //MFX_VERSION >= 1022
+    {
+        m_caps.LCUSizeSupported = (32 >> 4);
+    }
+
+    m_caps.BlockSize = 2;
 
     m_caps.VCMBitRateControl =
         attrs[ idx_map[VAConfigAttribRateControl] ].value & VA_RC_VCM ? 1 : 0; //Video conference mode
@@ -803,14 +857,17 @@ mfxStatus VAAPIEncoder::CreateAuxilliaryDevice(
             attrs[ idx_map[VAConfigAttribEncMaxRefFrames] ].value & 0xffff;
         m_caps.MaxNum_Reference1 =
             (attrs[ idx_map[VAConfigAttribEncMaxRefFrames] ].value >>16) & 0xffff;
+
+        if(!m_caps.MaxNum_Reference1 || (m_caps.MaxNum_Reference1 > m_caps.MaxNum_Reference0))
+        {
+            m_caps.MaxNum_Reference1 = m_caps.MaxNum_Reference0;
+        }
     }
     else
     {
         m_caps.MaxNum_Reference0 = 3;
         m_caps.MaxNum_Reference1 = 1;
     }
-    m_caps.LCUSizeSupported = 2;
-    m_caps.BlockSize = 2;
 
     if (attrs[ idx_map[VAConfigAttribEncROI] ].value != VA_ATTRIB_NOT_SUPPORTED) // VAConfigAttribEncROI
     {
@@ -843,34 +900,33 @@ mfxStatus VAAPIEncoder::CreateAccelerationService(MfxVideoParam const & par)
 
     MFX_CHECK(m_vaDisplay, MFX_ERR_DEVICE_FAILED);
 
-    mfxI32 entrypointsIndx = 0;
     mfxI32 numEntrypoints = vaMaxNumEntrypoints(m_vaDisplay);
     MFX_CHECK(numEntrypoints, MFX_ERR_DEVICE_FAILED);
 
     std::vector<VAEntrypoint> pEntrypoints(numEntrypoints);
 
-    VAStatus vaSts = vaQueryConfigEntrypoints(
+    VAParameters vaParams;
+    try { vaParams = GUID2VAParam.at(GetGUID(par)); }
+    catch (std::out_of_range&) { return MFX_ERR_DEVICE_FAILED; }
+
+    std::vector<VAProfile> profile_list(vaMaxNumProfiles(m_vaDisplay), VAProfileNone);
+    mfxI32 num_profiles = 0;
+    VAStatus vaSts = vaQueryConfigProfiles(
                 m_vaDisplay,
-                ConvertProfileTypeMFX2VAAPI(par.mfx.CodecProfile),
-                &*pEntrypoints.begin(),
+                profile_list.data(),
+                &num_profiles);
+    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+    MFX_CHECK_WITH_ASSERT(std::find(profile_list.begin(), profile_list.end(), vaParams.profile) != profile_list.end(),
+        MFX_ERR_DEVICE_FAILED);
+
+    vaSts = vaQueryConfigEntrypoints(
+                m_vaDisplay,
+                vaParams.profile,
+                pEntrypoints.data(),
                 &numEntrypoints);
     MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
-
-
-    VAEntrypoint entryPoint = GetVAEntryPoint();
-    bool bEncodeEnable = false;
-    for( entrypointsIndx = 0; entrypointsIndx < numEntrypoints; entrypointsIndx++ )
-    {
-        if (entryPoint == pEntrypoints[entrypointsIndx])
-        {
-            bEncodeEnable = true;
-            break;
-        }
-    }
-    if( !bEncodeEnable )
-    {
-        return MFX_ERR_DEVICE_FAILED;
-    }
+    MFX_CHECK_WITH_ASSERT(std::find(pEntrypoints.begin(), pEntrypoints.end(), vaParams.entrypoint) != pEntrypoints.end(),
+        MFX_ERR_DEVICE_FAILED);
 
     // Configuration
     std::vector<VAConfigAttrib> attrib(2);
@@ -884,8 +940,8 @@ mfxStatus VAAPIEncoder::CreateAccelerationService(MfxVideoParam const & par)
     MFX_CHECK_STS(sts);
 
     vaSts = vaGetConfigAttributes(m_vaDisplay,
-                          ConvertProfileTypeMFX2VAAPI(par.mfx.CodecProfile),
-                          entryPoint,
+                          vaParams.profile,
+                          vaParams.entrypoint,
                           attrib.data(), (mfxI32)attrib.size());
     MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
 
@@ -905,8 +961,8 @@ mfxStatus VAAPIEncoder::CreateAccelerationService(MfxVideoParam const & par)
 
     vaSts = vaCreateConfig(
         m_vaDisplay,
-        ConvertProfileTypeMFX2VAAPI(par.mfx.CodecProfile),
-        entryPoint,
+        vaParams.profile,
+        vaParams.entrypoint,
         attrib.data(),
         (mfxI32)attrib.size(),
         &m_vaConfig);

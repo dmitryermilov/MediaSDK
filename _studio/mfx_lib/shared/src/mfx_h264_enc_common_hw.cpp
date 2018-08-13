@@ -83,7 +83,7 @@ namespace
 
         return true;
     }
-
+#ifdef MFX_ENABLE_H264_REPARTITION_CHECK
     bool CheckTriStateOptionWithAdaptive(mfxU16 & opt)
     {
         if (opt != MFX_CODINGOPTION_UNKNOWN &&
@@ -97,6 +97,7 @@ namespace
 
         return true;
     }
+#endif
 
     bool CheckTriStateOptionForOff(mfxU16 & opt)
     {
@@ -981,13 +982,6 @@ namespace
         }
 
         return mfxU32(MFX_MIN(UINT_MAX, (par.mfx.FrameInfo.Width * par.mfx.FrameInfo.Height * mvcMultiplier / (16u * 16u) * maxMBBytes + 999u) / 1000u));
-    }
-
-
-    mfxU8 GetDefaultLog2MaxFrameNumMinux4(mfxVideoParam const & video)
-    {
-        // frame_num should be able to distinguish NumRefFrame reference frames + current frame
-        return mfxU8(MFX_MAX(4, CeilLog2(video.mfx.NumRefFrame + 1)) - 4);
     }
 
     mfxU32 CheckAgreementOfFrameRate(
@@ -2423,6 +2417,26 @@ mfxStatus MfxHwH264Encode::CheckVideoParamQueryLike(
         par.mfx.RateControlMethod = 0;
     }
 
+    if (platform > MFX_HW_ICL_LP)
+    {
+        if (bRateControlLA(par.mfx.RateControlMethod))
+        {
+            unsupported = true;
+            par.mfx.RateControlMethod = 0;
+        }
+
+        if (extOpt2->MaxSliceSize && !(IsOn(par.mfx.LowPower) && hwCaps.SliceLevelRateCtrl))
+        {
+            changed = true;
+            extOpt2->MaxSliceSize = 0;
+        }
+
+        if (IsOn(extOpt3->FadeDetection))
+        {
+            changed = true;
+            extOpt3->FadeDetection = MFX_CODINGOPTION_OFF;
+        }
+    }
 
     if (bRateControlLA(par.mfx.RateControlMethod) && IsOn(extOpt->CAVLC))
     {
@@ -4388,6 +4402,20 @@ mfxStatus MfxHwH264Encode::CheckVideoParamQueryLike(
 
             changed = true;
         }
+
+        if (platform >= MFX_HW_KBL)
+        {
+            if (extPwt->LumaLog2WeightDenom && extPwt->LumaLog2WeightDenom != 6)
+            {
+                extPwt->LumaLog2WeightDenom = 6;
+                changed = true;
+            }
+            if (extPwt->ChromaLog2WeightDenom && extPwt->ChromaLog2WeightDenom != 6)
+            {
+                extPwt->ChromaLog2WeightDenom = 6;
+                changed = true;
+            }
+        }
     }
 
     if (!CheckRangeDflt(extOpt2->SkipFrame, 0, 3, 0)) changed = true;
@@ -6041,7 +6069,7 @@ void MfxHwH264Encode::SetDefaults(
             extSps->vui.sarHeight                    = arConv.GetSarHeight();
 
             extSps->vui.flags.overscanInfoPresent = !IsOff(extOpt3->OverscanInfoPresent);
-            extSps->vui.flags.overscanAppropriate = !IsOff(extOpt3->OverscanAppropriate);;
+            extSps->vui.flags.overscanAppropriate = !IsOff(extOpt3->OverscanAppropriate);
 
             extSps->vui.videoFormat                    = mfxU8(extVsi->VideoFormat);
             extSps->vui.flags.videoFullRange           = extVsi->VideoFullRange;
@@ -6258,7 +6286,8 @@ mfxStatus MfxHwH264Encode::CheckRunTimeExtBuffers(
     mfxEncodeCtrl       * ctrl,
     mfxFrameSurface1    * surface,
     mfxBitstream        * bs,
-    ENCODE_CAPS   const & caps)
+    ENCODE_CAPS   const & caps,
+    eMFXHWType            platform)
 {
     MFX_CHECK_NULL_PTR3(ctrl, surface, bs);
     mfxStatus checkSts = MFX_ERR_NONE;
@@ -6528,6 +6557,19 @@ mfxStatus MfxHwH264Encode::CheckRunTimeExtBuffers(
         mfeCtrl->Timeout = 0;
     }
 #endif
+    mfxExtPredWeightTable *extPwt = GetExtBuffer(*ctrl);
+    if (extPwt && (platform >= MFX_HW_KBL))
+    {
+        if (extPwt->LumaLog2WeightDenom && (extPwt->LumaLog2WeightDenom != 6))
+        {
+            checkSts = MFX_WRN_INCOMPATIBLE_VIDEO_PARAM;
+        }
+        if (extPwt->ChromaLog2WeightDenom && (extPwt->ChromaLog2WeightDenom != 6))
+        {
+            checkSts = MFX_WRN_INCOMPATIBLE_VIDEO_PARAM;
+        }
+    }
+
     return checkSts;
 }
 
@@ -9002,6 +9044,10 @@ void WritePredWeightTable(
     const mfxExtPredWeightTable* pPWT = GetExtBuffer(task.m_ctrl, task.m_fid[fieldId]);
 
     if (!pPWT)
+        pPWT = &task.m_pwt[fieldId];
+    else if ((task.m_hwType >= MFX_HW_KBL) &&
+        ((pPWT->LumaLog2WeightDenom && pPWT->LumaLog2WeightDenom != 6) ||
+        (pPWT->ChromaLog2WeightDenom && pPWT->ChromaLog2WeightDenom != 6)))
         pPWT = &task.m_pwt[fieldId];
 
     mfxU32 nRef[2] = {
