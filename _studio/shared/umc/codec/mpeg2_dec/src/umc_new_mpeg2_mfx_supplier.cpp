@@ -254,7 +254,9 @@ UMC::Status MFXTaskSupplier_MPEG2::FillVideoParam(mfxVideoParam *par, bool full)
     if (!seqExt)
         return UMC::UMC_ERR_FAILED;
 
-    if (MFX_Utility::FillVideoParam(seq, seqExt, par, full) != UMC::UMC_OK)
+    const MPEG2SequenceDisplayExtension * dispExt = GetHeaders()->m_SequenceDisplayExt.GetCurrentHeader(); // optional
+
+    if (MFX_Utility::FillVideoParam(seq, seqExt, dispExt, par, full) != UMC::UMC_OK)
         return UMC::UMC_ERR_FAILED;
 
     return UMC::UMC_OK;

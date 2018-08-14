@@ -301,7 +301,10 @@ bool CheckFourcc(mfxU32 fourcc, mfxU16 codecProfile, mfxFrameInfo const* frameIn
 }
 
 // Initialize mfxVideoParam structure based on decoded bitstream header values
-UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq, const MPEG2SequenceExtension * seqExt, mfxVideoParam *par, bool full)
+UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq,
+                           const MPEG2SequenceExtension * seqExt,
+                           const MPEG2SequenceDisplayExtension * dispExt,
+                           mfxVideoParam *par, bool full)
 {
     par->mfx.CodecId = MFX_CODEC_MPEG2;
 
@@ -337,19 +340,17 @@ UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq, const MPEG2SequenceE
 
     par->mfx.DecodedOrder = 0;
 
-/*
     // video signal section
     mfxExtVideoSignalInfo * videoSignal = (mfxExtVideoSignalInfo *)GetExtendedBuffer(par->ExtParam, par->NumExtParam, MFX_EXTBUFF_VIDEO_SIGNAL_INFO);
-    if (videoSignal)
+    if (videoSignal && dispExt)
     {
-        videoSignal->VideoFormat = (mfxU16)seq->video_format;
-        videoSignal->VideoFullRange = (mfxU16)seq->video_full_range_flag;
-        videoSignal->ColourDescriptionPresent = (mfxU16)seq->colour_description_present_flag;
-        videoSignal->ColourPrimaries = (mfxU16)seq->colour_primaries;
-        videoSignal->TransferCharacteristics = (mfxU16)seq->transfer_characteristics;
-        videoSignal->MatrixCoefficients = (mfxU16)seq->matrix_coeffs;
+        videoSignal->VideoFormat              = (mfxU16)dispExt->video_format;
+        videoSignal->ColourPrimaries          = (mfxU16)dispExt->colour_primaries;
+        videoSignal->TransferCharacteristics  = (mfxU16)dispExt->transfer_characteristics;
+        videoSignal->MatrixCoefficients       = (mfxU16)dispExt->matrix_coefficients;
+        videoSignal->ColourDescriptionPresent = (mfxU16)dispExt->colour_description;
     }
-*/
+
     return UMC::UMC_OK;
 }
 
@@ -361,6 +362,7 @@ public:
     HeadersAnalyzer(TaskSupplier_MPEG2 * supplier)
         : m_isSeqFound(false)
         , m_isSeqExtFound(false)
+        , m_isDisplayExtSearchRequired(false)
         , m_supplier(supplier)
         , m_lastSlice(0)
     {}
@@ -377,22 +379,28 @@ public:
     virtual UMC::Status ProcessNalUnit(UMC::MediaData * data);
     // Returns whether necessary headers are found
     virtual bool IsEnough() const
-    { return m_isSeqFound && m_isSeqExtFound; }
+    { return m_isSeqFound && m_isSeqExtFound && !m_isDisplayExtSearchRequired; }
+    // Returns whether necessary sequence display extension is required
+    virtual bool IsDisplayExtRequired() const
+    { return m_isDisplayExtSearchRequired; }
 
 protected:
 
     bool m_isSeqFound;
     bool m_isSeqExtFound;
+    bool m_isDisplayExtSearchRequired;
 
     TaskSupplier_MPEG2 * m_supplier;
     MPEG2Slice * m_lastSlice;
 };
 
 // Decode a memory buffer looking for header NAL units in it
-UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *bs, mfxVideoParam *)
+UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *bs, mfxVideoParam * par)
 {
     if (!data)
         return UMC::UMC_ERR_NULL_PTR;
+
+    m_isDisplayExtSearchRequired = (mfxExtVideoSignalInfo *) GetExtendedBuffer(par->ExtParam, par->NumExtParam, MFX_EXTBUFF_VIDEO_SIGNAL_INFO);
 
     m_lastSlice = 0;
 
@@ -476,6 +484,9 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
         switch (startCode)
         {
         case NAL_UT_PICTURE_HEADER:
+            // Display extension had to be before the first picture.
+            // So stop looking for the display extension.
+            m_isDisplayExtSearchRequired = false;
         case NAL_UT_USER_DATA:
         case NAL_UT_SEQUENCE_ERROR:
         case NAL_UT_SEQUENCE_END:
@@ -530,7 +541,7 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
 
             case NAL_UT_EXTENSION:
             {
-                // TODO: need to thing of a better way to get a type of extension
+                // TODO: need to think of a better way to get a type of extension
                 uint8_t const * const data = (uint8_t*)nalUnit->GetDataPointer();
                 NalUnitTypeExt extId = (NalUnitTypeExt) (data[1] >> 4);
 
@@ -539,7 +550,11 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
                 case NAL_UT_EXT_SEQUENCE_EXTENSION:
                     m_isSeqExtFound = true;
                     break;
+                case NAL_UT_EXT_SEQUENCE_DISPLAY_EXTENSION:
+                    m_isDisplayExtSearchRequired = false; // found
+                    break;
                 default:
+                    m_isDisplayExtSearchRequired = false; // questionable: shall DISPLAY_EXTENSION be the first extension after SEQUENCE_EXTENSION ?
                     break;
                 }
             }
