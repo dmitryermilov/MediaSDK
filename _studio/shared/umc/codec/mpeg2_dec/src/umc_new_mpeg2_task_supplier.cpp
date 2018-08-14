@@ -1075,6 +1075,16 @@ UMC::Status TaskSupplier_MPEG2::xDecodeSequenceExt(MPEG2HeadersBitstream *bs)
     return UMC::UMC_OK;
 }
 
+UMC::Status TaskSupplier_MPEG2::xDecodeSequenceDisplayExt(MPEG2HeadersBitstream *bs)
+{
+    MPEG2SequenceDisplayExtension dispExt;
+
+    bs->GetSequenceDisplayExtension(&dispExt);
+    m_Headers.m_SequenceDisplayExt.AddHeader(&dispExt);
+
+    return UMC::UMC_OK;
+}
+
 // Decode video parameters set NAL unit
 UMC::Status TaskSupplier_MPEG2::xDecodeVPS(MPEG2HeadersBitstream *bs)
 {
@@ -1441,6 +1451,9 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
             {
             case NAL_UT_EXT_SEQUENCE_EXTENSION:
                 umcRes = xDecodeSequenceExt(&bitStream);
+                break;
+            case NAL_UT_EXT_SEQUENCE_DISPLAY_EXTENSION:
+                umcRes = xDecodeSequenceDisplayExt(&bitStream);
                 break;
             default:
                 break;

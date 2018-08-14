@@ -478,6 +478,8 @@ private:
     UMC::Status xDecodeSequenceHeader(MPEG2HeadersBitstream *);
     // Decode sequence extension
     UMC::Status xDecodeSequenceExt(MPEG2HeadersBitstream *);
+    // Decode sequence display extension
+    UMC::Status xDecodeSequenceDisplayExt(MPEG2HeadersBitstream *);
 
     // Decode video parameters set NAL unit
     UMC::Status xDecodeVPS(MPEG2HeadersBitstream *);
