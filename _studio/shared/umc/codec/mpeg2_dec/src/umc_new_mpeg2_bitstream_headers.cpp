@@ -610,7 +610,7 @@ void MPEG2HeadersBitstream::parseProfileTier(MPEG2PTL *ptl)
 
     if (!ptl->profile_idc)
     {
-        ptl->profile_idc = MPEG2_PROFILE_MAIN_NEW;
+        ptl->profile_idc = MPEG2_PROFILE_MAIN_REMOVE;
         for(int j = 1; j < 32; j++)
         {
             if (ptl->profile_compatibility_flags & (1 << j))
@@ -621,8 +621,8 @@ void MPEG2HeadersBitstream::parseProfileTier(MPEG2PTL *ptl)
         }
     }
 
-    if (ptl->profile_idc > MPEG2_PROFILE_FREXT &&
-        ptl->profile_idc != MPEG2_PROFILE_SCC)
+    if (ptl->profile_idc > MPEG2_PROFILE_FREXT_REMOVE &&
+        ptl->profile_idc != MPEG2_PROFILE_SCC_REMOVE)
         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
 
     ptl->progressive_source_flag    = Get1Bit();
@@ -631,8 +631,8 @@ void MPEG2HeadersBitstream::parseProfileTier(MPEG2PTL *ptl)
     ptl->frame_only_constraint_flag = Get1Bit();
 
     uint8_t reserved_zero_bits_num = 44; //incl. general_inbld_flag
-    if (ptl->profile_idc == MPEG2_PROFILE_FREXT || (ptl->profile_compatibility_flags & (1 << 4)) ||
-        ptl->profile_idc == MPEG2_PROFILE_SCC   || (ptl->profile_compatibility_flags & (1 << 9)))
+    if (ptl->profile_idc == MPEG2_PROFILE_FREXT_REMOVE || (ptl->profile_compatibility_flags & (1 << 4)) ||
+        ptl->profile_idc == MPEG2_PROFILE_SCC_REMOVE   || (ptl->profile_compatibility_flags & (1 << 9)))
     {
         ptl->max_12bit_constraint_flag = Get1Bit();
         ptl->max_10bit_constraint_flag = Get1Bit();
@@ -644,7 +644,7 @@ void MPEG2HeadersBitstream::parseProfileTier(MPEG2PTL *ptl)
         ptl->one_picture_only_constraint_flag = Get1Bit();
         ptl->lower_bit_rate_constraint_flag = Get1Bit();
 
-        if (ptl->profile_idc == MPEG2_PROFILE_SCC   || (ptl->profile_compatibility_flags & (1 << 9)))
+        if (ptl->profile_idc == MPEG2_PROFILE_SCC_REMOVE   || (ptl->profile_compatibility_flags & (1 << 9)))
         {
             ptl->max_14bit_constraint_flag = Get1Bit();
             reserved_zero_bits_num = 34;
@@ -737,10 +737,10 @@ UMC::Status MPEG2HeadersBitstream::GetSequenceParamSet(MPEG2SeqParamSet *pcSPS)
 
     pcSPS->setQpBDOffsetC(6*(pcSPS->bit_depth_chroma - 8));
 
-    if ((pcSPS->bit_depth_luma > 8 || pcSPS->bit_depth_chroma > 8) && pcSPS->m_pcPTL.GetGeneralPTL()->profile_idc < MPEG2_PROFILE_MAIN10)
-        pcSPS->m_pcPTL.GetGeneralPTL()->profile_idc = MPEG2_PROFILE_MAIN10;
+    if ((pcSPS->bit_depth_luma > 8 || pcSPS->bit_depth_chroma > 8) && pcSPS->m_pcPTL.GetGeneralPTL()->profile_idc < MPEG2_PROFILE_MAIN10_REMOVE)
+        pcSPS->m_pcPTL.GetGeneralPTL()->profile_idc = MPEG2_PROFILE_MAIN10_REMOVE;
 
-    if (pcSPS->m_pcPTL.GetGeneralPTL()->profile_idc == MPEG2_PROFILE_MAIN10 || pcSPS->bit_depth_luma > 8 || pcSPS->bit_depth_chroma > 8)
+    if (pcSPS->m_pcPTL.GetGeneralPTL()->profile_idc == MPEG2_PROFILE_MAIN10_REMOVE || pcSPS->bit_depth_luma > 8 || pcSPS->bit_depth_chroma > 8)
         pcSPS->need16bitOutput = 1;
 
     pcSPS->log2_max_pic_order_cnt_lsb = 4 + GetVLCElementU();
@@ -941,7 +941,7 @@ UMC::Status MPEG2HeadersBitstream::GetSequenceParamSet(MPEG2SeqParamSet *pcSPS)
 
         if (pcSPS->sps_scc_extension_flag)
         {
-            if (pcSPS->getPTL()->GetGeneralPTL()->profile_idc != MPEG2_PROFILE_SCC)
+            if (pcSPS->getPTL()->GetGeneralPTL()->profile_idc != MPEG2_PROFILE_SCC_REMOVE)
                 skip_extension_bits = true;
             else
             {
@@ -1305,7 +1305,7 @@ UMC::Status MPEG2HeadersBitstream::GetPictureParamSetFull(MPEG2PicParamSet  *pcP
 
         if (pcPPS->pps_scc_extension_flag)
         {
-            if (pcSPS->getPTL()->GetGeneralPTL()->profile_idc != MPEG2_PROFILE_SCC)
+            if (pcSPS->getPTL()->GetGeneralPTL()->profile_idc != MPEG2_PROFILE_SCC_REMOVE)
                 skip_extension_bits = true;
             else
             {

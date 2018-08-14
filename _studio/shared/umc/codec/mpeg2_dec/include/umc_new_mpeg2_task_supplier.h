@@ -497,6 +497,12 @@ private:
 // Calculate maximum DPB size based on level and resolution
 extern int32_t CalculateDPBSize(uint32_t profile_idc, uint32_t &level_idc, int32_t width, int32_t height, uint32_t num_ref_frames);
 
+void GetMfxFrameRate(uint8_t frame_rate_value, mfxU32 & frameRateN, mfxU32 & frameRateD);
+mfxU8 GetMfxCodecProfile(uint8_t profile);
+mfxU8 GetMfxCodecLevel(uint8_t level);
+bool DARtoPAR(uint32_t width, uint32_t height, uint32_t dar_h, uint32_t dar_v, uint16_t & par_h, uint16_t &par_v);
+bool CalcAspectRatio(uint32_t dar_code, uint32_t width, uint32_t height, uint16_t & aspectRatioW, uint16_t & aspectRatioH);
+
 } // namespace UMC_MPEG2_DECODER
 
 #endif // __UMC_MPEG2_TASK_SUPPLIER_H

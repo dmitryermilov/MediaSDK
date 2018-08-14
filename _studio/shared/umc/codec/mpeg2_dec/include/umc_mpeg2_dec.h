@@ -1,15 +1,15 @@
 // Copyright (c) 2017 Intel Corporation
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -37,11 +37,11 @@ namespace UMC
 
 // profile and level definitions for mpeg2 video
 // values for profile and level fields in BaseCodecParams
-#define MPEG2_PROFILE_SIMPLE  5
-#define MPEG2_PROFILE_MAIN    4
-#define MPEG2_PROFILE_SNR     3
-#define MPEG2_PROFILE_SPATIAL 2
-#define MPEG2_PROFILE_HIGH    1
+#define MPEG2_PROFILE_SIMPLE_OLD  5
+#define MPEG2_PROFILE_MAIN_OLD    4
+#define MPEG2_PROFILE_SNR_OLD     3
+#define MPEG2_PROFILE_SPATIAL_OLD 2
+#define MPEG2_PROFILE_HIGH_OLD    1
 
 #define MPEG2_LEVEL_LOW   10
 #define MPEG2_LEVEL_MAIN   8
@@ -49,7 +49,7 @@ namespace UMC
 #define MPEG2_LEVEL_HIGH   4
 
     class MPEG2VideoDecoderBase;
-    
+
 }
 
 #endif // ifdef UMC_ENABLE_MPEG2_VIDEO_DECODER

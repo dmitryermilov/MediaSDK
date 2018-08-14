@@ -33,16 +33,22 @@ namespace UMC_MPEG2_DECODER
   #define MPEG2_FORCEINLINE __attribute__((always_inline))
   #define MPEG2_NONLINE __attribute__((noinline))
 
-// This better be placed in some general/common header
-# define MPEG2_RESTRICT
+enum
+{
+    MPEG2_PROFILE_MAIN_REMOVE   = 1,
+    MPEG2_PROFILE_MAIN10_REMOVE = 2,
+    MPEG2_PROFILE_MAINSP_REMOVE = 3,
+    MPEG2_PROFILE_FREXT_REMOVE  = 4,
+    MPEG2_PROFILE_SCC_REMOVE    = 9,
+};
 
 enum
 {
-    MPEG2_PROFILE_MAIN_NEW   = 1,
-    MPEG2_PROFILE_MAIN10 = 2,
-    MPEG2_PROFILE_MAINSP = 3,
-    MPEG2_PROFILE_FREXT  = 4,
-    MPEG2_PROFILE_SCC    = 9,
+    MPEG2_PROFILE_SIMPLE              = 5,
+    MPEG2_PROFILE_MAIN                = 4,
+    MPEG2_PROFILE_SNR_SCALABLE        = 3,
+    MPEG2_PROFILE_SPATIALLY_SCALABLE  = 2,
+    MPEG2_PROFILE_HIGH                = 1,
 };
 
 // MPEG2 level identifiers
@@ -1530,7 +1536,6 @@ inline T * mpeg2_new_array_throw(int32_t size)
 
 enum
 {
-    CHROMA_FORMAT_400       = 0,
     CHROMA_FORMAT_420       = 1,
     CHROMA_FORMAT_422       = 2,
     CHROMA_FORMAT_444       = 3
@@ -1542,9 +1547,6 @@ inline UMC::ColorFormat GetUMCColorFormat_MPEG2(int32_t color_format)
     UMC::ColorFormat format;
     switch(color_format)
     {
-    case CHROMA_FORMAT_400:
-        format = UMC::GRAY;
-        break;
     case CHROMA_FORMAT_422:
         format = UMC::YUV422;
         break;
@@ -1566,10 +1568,6 @@ inline int32_t GetMPEG2ColorFormat(UMC::ColorFormat color_format)
     int32_t format;
     switch(color_format)
     {
-    case UMC::GRAY:
-    case UMC::GRAYA:
-        format = CHROMA_FORMAT_400;
-        break;
     case UMC::YUV422A:
     case UMC::YUV422:
         format = CHROMA_FORMAT_422;
