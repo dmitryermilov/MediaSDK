@@ -59,8 +59,6 @@ mfxU16 MatchProfile(mfxU32 fourcc)
     switch (fourcc)
     {
         case MFX_FOURCC_NV12: return MFX_PROFILE_MPEG2_MAIN;
-
-
     }
 
     return MFX_PROFILE_UNKNOWN;
@@ -303,10 +301,10 @@ bool CheckFourcc(mfxU32 fourcc, mfxU16 codecProfile, mfxFrameInfo const* frameIn
 }
 
 // Initialize mfxVideoParam structure based on decoded bitstream header values
-UMC::Status FillVideoParam(const MPEG2SeqParamSet * seq, mfxVideoParam *par, bool full)
+UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq, const MPEG2SequenceExtension * seqExt, mfxVideoParam *par, bool full)
 {
     par->mfx.CodecId = MFX_CODEC_MPEG2;
-
+/*
     par->mfx.FrameInfo.Width = (mfxU16) (seq->pic_width_in_luma_samples);
     par->mfx.FrameInfo.Height = (mfxU16) (seq->pic_height_in_luma_samples);
 
@@ -394,7 +392,7 @@ UMC::Status FillVideoParam(const MPEG2SeqParamSet * seq, mfxVideoParam *par, boo
 //         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->one_picture_only_constraint_flag ? MFX_MPEG2_CONSTR_REXT_ONE_PICTURE_ONLY : 0;
 //         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->lower_bit_rate_constraint_flag ? MFX_MPEG2_CONSTR_REXT_LOWER_BIT_RATE : 0;
 //     }
-
+*/
     return UMC::UMC_OK;
 }
 
@@ -404,9 +402,8 @@ class HeadersAnalyzer
 public:
 
     HeadersAnalyzer(TaskSupplier_MPEG2 * supplier)
-        : m_isVPSFound(false)
-        , m_isSPSFound(false)
-        , m_isPPSFound(false)
+        : m_isSeqFound(false)
+        , m_isSeqExtFound(false)
         , m_supplier(supplier)
         , m_lastSlice(0)
     {}
@@ -423,13 +420,12 @@ public:
     virtual UMC::Status ProcessNalUnit(UMC::MediaData * data);
     // Returns whether necessary headers are found
     virtual bool IsEnough() const
-    { return m_isSPSFound && m_isPPSFound; }
+    { return m_isSeqFound && m_isSeqExtFound; }
 
 protected:
 
-    bool m_isVPSFound;
-    bool m_isSPSFound;
-    bool m_isPPSFound;
+    bool m_isSeqFound;
+    bool m_isSeqExtFound;
 
     TaskSupplier_MPEG2 * m_supplier;
     MPEG2Slice * m_lastSlice;
@@ -443,15 +439,15 @@ UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *b
 
     m_lastSlice = 0;
 
-    MPEG2SeqParamSet* first_sps = 0;
-    notifier0<MPEG2SeqParamSet> sps_guard(&MPEG2Slice::DecrementReference);
+    MPEG2SequenceHeader* first_seq = 0;
+    notifier0<MPEG2SequenceHeader> seq_guard(&MPEG2Slice::DecrementReference);
 
     UMC::Status umcRes = UMC::UMC_ERR_NOT_ENOUGH_DATA;
     for ( ; data->GetDataSize() > 3; )
     {
         m_supplier->GetNalUnitSplitter()->MoveToStartCode(data); // move data pointer to start code
 
-        if (!m_isSPSFound) // move point to first start code
+        if (!m_isSeqFound) // move point to first start code
         {
             bs->DataOffset = (mfxU32)((mfxU8*)data->GetDataPointer() - (mfxU8*)data->GetBufferPointer());
             bs->DataLength = (mfxU32)data->GetDataSize();
@@ -465,15 +461,15 @@ UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *b
         if (umcRes != UMC::UMC_OK)
             break;
 
-        if (!first_sps && m_isSPSFound)
+        if (!first_seq && m_isSeqFound)
         {
-            first_sps = m_supplier->GetHeaders()->m_SeqParams.GetCurrentHeader();
-            VM_ASSERT(first_sps && "Current SPS should be valid when [m_isSPSFound]");
+            first_seq = m_supplier->GetHeaders()->m_SequenceParam.GetCurrentHeader();
+            VM_ASSERT(first_seq && "Current sequence header should be valid when [m_isSeqFound]");
 
-            MFX_CHECK_NULL_PTR1(first_sps);
+            MFX_CHECK_NULL_PTR1(first_seq);
 
-            first_sps->IncrementReference();
-            sps_guard.Reset(first_sps);
+            first_seq->IncrementReference();
+            seq_guard.Reset(first_seq);
         }
 
         if (IsEnough())
@@ -499,9 +495,9 @@ UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *b
 
     if (IsEnough())
     {
-        MPEG2SeqParamSet* last_sps = m_supplier->GetHeaders()->m_SeqParams.GetCurrentHeader();
-        if (first_sps && first_sps != last_sps)
-            m_supplier->GetHeaders()->m_SeqParams.AddHeader(first_sps);
+        MPEG2SequenceHeader* last_seq = m_supplier->GetHeaders()->m_SequenceParam.GetCurrentHeader();
+        if (first_seq && first_seq != last_seq)
+            m_supplier->GetHeaders()->m_SequenceParam.AddHeader(first_seq);
 
         return UMC::UMC_OK;
     }
@@ -522,33 +518,23 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
 
         switch (startCode)
         {
-            case NAL_UT_CODED_SLICE_TRAIL_R:
-            case NAL_UT_CODED_SLICE_TRAIL_N:
-            case NAL_UT_CODED_SLICE_TLA_R:
-            case NAL_UT_CODED_SLICE_TSA_N:
-            case NAL_UT_CODED_SLICE_STSA_R:
-            case NAL_UT_CODED_SLICE_STSA_N:
-            case NAL_UT_CODED_SLICE_BLA_W_LP:
-            case NAL_UT_CODED_SLICE_BLA_W_RADL:
-            case NAL_UT_CODED_SLICE_BLA_N_LP:
-            case NAL_UT_CODED_SLICE_IDR_W_RADL:
-            case NAL_UT_CODED_SLICE_IDR_N_LP:
-            case NAL_UT_CODED_SLICE_CRA:
-            case NAL_UT_CODED_SLICE_RADL_R:
-            case NAL_UT_CODED_SLICE_RASL_R:
-            {
-                if (IsEnough())
-                {
-                    return UMC::UMC_OK;
-                }
-                else
-                    break; // skip nal unit
-            }
-            break;
+        case NAL_UT_PICTURE_HEADER:
+        case NAL_UT_USER_DATA:
+        case NAL_UT_SEQUENCE_ERROR:
+        case NAL_UT_SEQUENCE_END:
+        case NAL_UT_GROUP:
+        {
 
-        case NAL_UT_VPS:
-        case NAL_UT_SPS:
-        case NAL_UT_PPS:
+            if (IsEnough())
+            {
+                return UMC::UMC_OK;
+            }
+            else
+                break; // skip nal unit
+        }
+        break;
+        case NAL_UT_SEQUENCE_HEADER:
+        case NAL_UT_EXTENSION:
             needProcess = true;
             break;
 
@@ -581,17 +567,26 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
 
             switch (startCode)
             {
-            case NAL_UT_VPS:
-                m_isVPSFound = true;
+            case NAL_UT_SEQUENCE_HEADER:
+                m_isSeqFound = true;
                 break;
 
-            case NAL_UT_SPS:
-                m_isSPSFound = true;
-                break;
+            case NAL_UT_EXTENSION:
+            {
+                // TODO: need to thing of a better way to get a type of extension
+                uint8_t const * const data = (uint8_t*)nalUnit->GetDataPointer();
+                NalUnitTypeExt extId = (NalUnitTypeExt) (data[1] >> 4);
 
-            case NAL_UT_PPS:
-                m_isPPSFound = true;
-                break;
+                switch (extId)
+                {
+                case NAL_UT_EXT_SEQUENCE_EXTENSION:
+                    m_isSeqExtFound = true;
+                    break;
+                default:
+                    break;
+                }
+            }
+            break;
 
             default:
                 break;
