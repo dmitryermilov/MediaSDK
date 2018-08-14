@@ -474,6 +474,11 @@ protected:
     UMC::Mutex m_mGuard;
 
 private:
+    // Decode sequence header
+    UMC::Status xDecodeSequenceHeader(MPEG2HeadersBitstream *);
+    // Decode sequence extension
+    UMC::Status xDecodeSequenceExt(MPEG2HeadersBitstream *);
+
     // Decode video parameters set NAL unit
     UMC::Status xDecodeVPS(MPEG2HeadersBitstream *);
     // Decode sequence parameters set NAL unit

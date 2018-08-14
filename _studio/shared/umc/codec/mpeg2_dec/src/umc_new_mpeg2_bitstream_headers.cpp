@@ -2118,6 +2118,12 @@ UMC::Status MPEG2HeadersBitstream::GetSliceHeaderFull(MPEG2Slice *rpcSlice, cons
     return UMC::UMC_OK;
 }
 
+UMC::Status MPEG2HeadersBitstream::GetNALUnitType(NalUnitType &nal_unit_type)
+{
+    nal_unit_type = (NalUnitType)GetBits(8);
+    return UMC::UMC_OK;
+}
+
 // Read and return NAL unit type and NAL storage idc.
 // Bitstream position is expected to be at the start of a NAL unit.
 UMC::Status MPEG2HeadersBitstream::GetNALUnitType(NalUnitType &nal_unit_type, uint32_t &nuh_temporal_id)

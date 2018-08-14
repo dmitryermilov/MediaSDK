@@ -246,11 +246,15 @@ void MFXTaskSupplier_MPEG2::SetVideoParams(mfxVideoParam * par)
 
 UMC::Status MFXTaskSupplier_MPEG2::FillVideoParam(mfxVideoParam *par, bool full)
 {
-    const MPEG2SeqParamSet * seq = GetHeaders()->m_SeqParams.GetCurrentHeader();
+    const MPEG2SequenceHeader * seq = GetHeaders()->m_SequenceParam.GetCurrentHeader();
     if (!seq)
         return UMC::UMC_ERR_FAILED;
 
-    if (MFX_Utility::FillVideoParam(seq, par, full) != UMC::UMC_OK)
+    const MPEG2SequenceExtension * seqExt = GetHeaders()->m_SequenceParamExt.GetCurrentHeader();
+    if (!seqExt)
+        return UMC::UMC_ERR_FAILED;
+
+    if (MFX_Utility::FillVideoParam(seq, seqExt, par, full) != UMC::UMC_OK)
         return UMC::UMC_ERR_FAILED;
 
     return UMC::UMC_OK;

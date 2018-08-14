@@ -31,7 +31,7 @@ namespace UMC_MPEG2_DECODER
 namespace MFX_Utility
 {
     // Initialize mfxVideoParam structure based on decoded bitstream header values
-    UMC::Status FillVideoParam(const MPEG2SeqParamSet * seq, mfxVideoParam *par, bool full);
+    UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq, const MPEG2SequenceExtension * seqExt, mfxVideoParam *par, bool full);
 
     // Returns implementation platform
     eMFXPlatform GetPlatform_MPEG2(VideoCORE * core, mfxVideoParam * par);

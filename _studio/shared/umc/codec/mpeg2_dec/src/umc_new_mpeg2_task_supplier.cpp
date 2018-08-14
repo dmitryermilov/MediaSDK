@@ -19,7 +19,6 @@
 // SOFTWARE.
 
 #include "umc_defs.h"
-//#define UMC_ENABLE_MPEG2_VIDEO_DECODER
 #ifdef UMC_ENABLE_MPEG2_VIDEO_DECODER
 
 #include "memory"
@@ -899,15 +898,24 @@ void TaskSupplier_MPEG2::AfterErrorRestore()
 // Fill up current bitstream information
 UMC::Status TaskSupplier_MPEG2::GetInfo(UMC::VideoDecoderParams *lpInfo)
 {
-    MPEG2SeqParamSet *sps = m_Headers.m_SeqParams.GetCurrentHeader();
-    if (!sps)
+    MPEG2SequenceHeader *seq = m_Headers.m_SequenceParam.GetCurrentHeader();
+    if (!seq)
     {
         return UMC::UMC_ERR_NOT_ENOUGH_DATA;
     }
 
-    lpInfo->info.clip_info.height = sps->pic_height_in_luma_samples - (sps->conf_win_top_offset + sps->conf_win_bottom_offset);
-    lpInfo->info.clip_info.width = sps->pic_width_in_luma_samples - (sps->conf_win_left_offset + sps->conf_win_right_offset);
+    MPEG2SequenceExtension *seqExt = m_Headers.m_SequenceParamExt.GetCurrentHeader();
+    if (!seqExt)
+    {
+        return UMC::UMC_ERR_NOT_ENOUGH_DATA;
+    }
 
+    lpInfo->info.stream_type = UMC::MPEG2_VIDEO;
+
+    lpInfo->info.clip_info.height = seq->horizontal_size_value;
+    lpInfo->info.clip_info.width = seq->vertical_size_value;
+
+/*
     if (0.0 < m_local_delta_frame_time)
     {
         lpInfo->info.framerate = 1.0 / m_local_delta_frame_time;
@@ -916,8 +924,6 @@ UMC::Status TaskSupplier_MPEG2::GetInfo(UMC::VideoDecoderParams *lpInfo)
     {
         lpInfo->info.framerate = 0;
     }
-
-    lpInfo->info.stream_type = UMC::MPEG2_VIDEO;
 
     lpInfo->profile = sps->m_pcPTL.GetGeneralPTL()->profile_idc;
     lpInfo->level = sps->m_pcPTL.GetGeneralPTL()->level_idc;
@@ -935,6 +941,7 @@ UMC::Status TaskSupplier_MPEG2::GetInfo(UMC::VideoDecoderParams *lpInfo)
     lpInfo->info.bitrate = (sps->getHrdParameters()->GetHRDSubLayerParam(0)->bit_rate_value[0][0] - 1) * multiplier;
 
     lpInfo->info.interlace_type = UMC::PROGRESSIVE;
+*/
     return UMC::UMC_OK;
 }
 
@@ -1030,6 +1037,28 @@ UMC::Status TaskSupplier_MPEG2::DecodeSEI(UMC::MediaDataEx *nalUnit)
     {
         // nothing to do just catch it
     }
+
+    return UMC::UMC_OK;
+}
+
+
+UMC::Status TaskSupplier_MPEG2::xDecodeSequenceHeader(MPEG2HeadersBitstream *bs)
+{
+    MPEG2SequenceHeader seq;
+
+    bs->GetSequenceHeader(&seq);
+
+    m_Headers.m_SequenceParam.AddHeader(&seq);
+
+    return UMC::UMC_OK;
+}
+
+UMC::Status TaskSupplier_MPEG2::xDecodeSequenceExt(MPEG2HeadersBitstream *bs)
+{
+    MPEG2SequenceExtension seqExt;
+
+    bs->GetSequenceExtension(&seqExt);
+    m_Headers.m_SequenceParamExt.AddHeader(&seqExt);
 
     return UMC::UMC_OK;
 }
@@ -1365,7 +1394,6 @@ UMC::Status TaskSupplier_MPEG2::xDecodePPS(MPEG2HeadersBitstream * bs)
 // Decode a bitstream header NAL unit
 UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
 {
-    //ViewItem_MPEG2 *view = GetView(BASE_VIEW);
     UMC::Status umcRes = UMC::UMC_OK;
 
     MPEG2HeadersBitstream bitStream;
@@ -1385,12 +1413,28 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
         bitStream.Reset((uint8_t*)swappedMem.GetPointer(), (uint32_t)swappedMem.GetDataSize());
 
         NalUnitType nal_unit_type;
-        uint32_t temporal_id;
 
-        bitStream.GetNALUnitType(nal_unit_type, temporal_id);
+        bitStream.GetNALUnitType(nal_unit_type);
 
         switch(nal_unit_type)
         {
+        case NAL_UT_SEQUENCE_HEADER:
+            umcRes = xDecodeSequenceHeader(&bitStream);
+            break;
+        case NAL_UT_EXTENSION:
+        {
+
+            NalUnitTypeExt nal_unit_type_ext = (NalUnitTypeExt)bitStream.GetBits(4);
+            switch(nal_unit_type_ext)
+            {
+            case NAL_UT_EXT_SEQUENCE_EXTENSION:
+                umcRes = xDecodeSequenceExt(&bitStream);
+                break;
+            default:
+                break;
+            }
+        }
+            break;
         case NAL_UT_VPS:
             umcRes = xDecodeVPS(&bitStream);
             break;
@@ -1640,6 +1684,11 @@ UMC::Status TaskSupplier_MPEG2::ProcessNalUnit(UMC::MediaDataEx *nalUnit)
 
     switch(unitType)
     {
+    case NAL_UT_SEQUENCE_HEADER:
+    case NAL_UT_EXTENSION:
+        umcRes = DecodeHeaders(nalUnit);
+        break;
+
     case NAL_UT_CODED_SLICE_TRAIL_R:
     case NAL_UT_CODED_SLICE_TRAIL_N:
     case NAL_UT_CODED_SLICE_TLA_R:
