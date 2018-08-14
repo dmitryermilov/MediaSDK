@@ -83,29 +83,6 @@ bool IsHWSupported(VideoCORE *pCore, mfxVideoParam *par)
     return true;
 }
 
-mfxU8 GetMfxCodecLevel(mfxI32 level)
-{
-    switch (level)
-    {
-        case MPEG2_LEVEL_LOW:  return MFX_LEVEL_MPEG2_LOW;
-        case MPEG2_LEVEL_MAIN: return MFX_LEVEL_MPEG2_MAIN;
-        case MPEG2_LEVEL_H14:  return MFX_LEVEL_MPEG2_HIGH1440;
-        case MPEG2_LEVEL_HIGH: return MFX_LEVEL_MPEG2_HIGH;
-        default:               return MFX_LEVEL_UNKNOWN;
-    }
-}
-
-mfxU8 GetMfxCodecProfile(mfxI32 profile)
-{
-    switch (profile)
-    {
-        case MPEG2_PROFILE_SIMPLE:  return MFX_PROFILE_MPEG2_SIMPLE;
-        case MPEG2_PROFILE_MAIN:    return MFX_PROFILE_MPEG2_MAIN;
-        case MPEG2_PROFILE_HIGH:    return MFX_PROFILE_MPEG2_HIGH;
-        default:                    return MFX_PROFILE_UNKNOWN;
-    }
-}
-
 mfxU16 GetMfxPicStruct(mfxU32 progressiveSequence, mfxU32 progressiveFrame, mfxU32 topFieldFirst, mfxU32 repeatFirstField, mfxU32 pictureStructure, mfxU16 extendedPicStruct)
 {
     mfxU16 picStruct = MFX_PICSTRUCT_UNKNOWN;

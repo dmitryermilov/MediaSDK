@@ -304,65 +304,40 @@ bool CheckFourcc(mfxU32 fourcc, mfxU16 codecProfile, mfxFrameInfo const* frameIn
 UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq, const MPEG2SequenceExtension * seqExt, mfxVideoParam *par, bool full)
 {
     par->mfx.CodecId = MFX_CODEC_MPEG2;
-/*
-    par->mfx.FrameInfo.Width = (mfxU16) (seq->pic_width_in_luma_samples);
-    par->mfx.FrameInfo.Height = (mfxU16) (seq->pic_height_in_luma_samples);
 
-    par->mfx.FrameInfo.Width = UMC::align_value<mfxU16>(par->mfx.FrameInfo.Width, 16);
-    par->mfx.FrameInfo.Height = UMC::align_value<mfxU16>(par->mfx.FrameInfo.Height, 16);
+    par->mfx.FrameInfo.CropX = 0;
+    par->mfx.FrameInfo.CropY = 0;
+    par->mfx.FrameInfo.CropW = seq->horizontal_size_value;
+    par->mfx.FrameInfo.CropH = seq->vertical_size_value;
 
-    par->mfx.FrameInfo.BitDepthLuma = (mfxU16) (seq->bit_depth_luma);
-    par->mfx.FrameInfo.BitDepthChroma = (mfxU16) (seq->bit_depth_chroma);
+    par->mfx.FrameInfo.Width = UMC::align_value<mfxU16>(par->mfx.FrameInfo.CropW, 16);
+    par->mfx.FrameInfo.Height = UMC::align_value<mfxU16>(par->mfx.FrameInfo.CropH, seqExt->progressive_sequence ? 16 : 32);
+
+    par->mfx.FrameInfo.BitDepthLuma   = 8;
+    par->mfx.FrameInfo.BitDepthChroma = 8;
     par->mfx.FrameInfo.Shift = 0;
 
-    //if (seq->frame_cropping_flag)
-    {
-        par->mfx.FrameInfo.CropX = (mfxU16)(seq->conf_win_left_offset + seq->def_disp_win_left_offset);
-        par->mfx.FrameInfo.CropY = (mfxU16)(seq->conf_win_top_offset + seq->def_disp_win_top_offset);
-        par->mfx.FrameInfo.CropH = (mfxU16)(par->mfx.FrameInfo.Height - (seq->conf_win_top_offset + seq->conf_win_bottom_offset + seq->def_disp_win_top_offset + seq->def_disp_win_bottom_offset));
-        par->mfx.FrameInfo.CropW = (mfxU16)(par->mfx.FrameInfo.Width - (seq->conf_win_left_offset + seq->conf_win_right_offset + seq->def_disp_win_left_offset + seq->def_disp_win_right_offset));
+    par->mfx.FrameInfo.PicStruct = seqExt->progressive_sequence  ? MFX_PICSTRUCT_PROGRESSIVE : MFX_PICSTRUCT_UNKNOWN;
+    par->mfx.FrameInfo.ChromaFormat = seqExt->chroma_format == CHROMA_FORMAT_420 ?
+                                        MFX_CHROMAFORMAT_YUV420 :
+                                        (seqExt->chroma_format == CHROMA_FORMAT_422 ?
+                                                MFX_CHROMAFORMAT_YUV422 :
+                                                MFX_CHROMAFORMAT_YUV444);
 
-        par->mfx.FrameInfo.CropH -= (mfxU16)(par->mfx.FrameInfo.Height - seq->pic_height_in_luma_samples);
-        par->mfx.FrameInfo.CropW -= (mfxU16)(par->mfx.FrameInfo.Width - seq->pic_width_in_luma_samples);
-    }
+    CalcAspectRatio(seq->aspect_ratio_information, seq->horizontal_size_value, seq->vertical_size_value,
+                    par->mfx.FrameInfo.AspectRatioW, par->mfx.FrameInfo.AspectRatioH);
 
-    par->mfx.FrameInfo.PicStruct = static_cast<mfxU16>(seq->field_seq_flag  ? MFX_PICSTRUCT_FIELD_SINGLE : MFX_PICSTRUCT_PROGRESSIVE);
-    par->mfx.FrameInfo.ChromaFormat = seq->chroma_format_idc;
+    GetMfxFrameRate(seqExt->frame_rate_code, par->mfx.FrameInfo.FrameRateExtN, par->mfx.FrameInfo.FrameRateExtD);
 
-    if (seq->aspect_ratio_info_present_flag || full)
-    {
-        par->mfx.FrameInfo.AspectRatioW = (mfxU16)seq->sar_width;
-        par->mfx.FrameInfo.AspectRatioH = (mfxU16)seq->sar_height;
-    }
-    else
-    {
-        par->mfx.FrameInfo.AspectRatioW = 0;
-        par->mfx.FrameInfo.AspectRatioH = 0;
-    }
+    // Table 8-1 – Meaning of bits in profile_and_level_indication
+    par->mfx.CodecProfile = GetMfxCodecProfile((seqExt->profile_and_level_indication >> 4) & 7); // [6:4] bits
+    par->mfx.CodecLevel = GetMfxCodecLevel(seqExt->profile_and_level_indication & 0xF); // [3:0] bites
 
-    if (seq->getTimingInfo()->vps_timing_info_present_flag || full)
-    {
-        par->mfx.FrameInfo.FrameRateExtD = seq->getTimingInfo()->vps_num_units_in_tick;
-        par->mfx.FrameInfo.FrameRateExtN = seq->getTimingInfo()->vps_time_scale;
-    }
-    else
-    {
-        par->mfx.FrameInfo.FrameRateExtD = 0;
-        par->mfx.FrameInfo.FrameRateExtN = 0;
-    }
-
-    par->mfx.CodecProfile = (mfxU16)seq->m_pcPTL.GetGeneralPTL()->profile_idc;
-    par->mfx.CodecLevel = (mfxU16)seq->m_pcPTL.GetGeneralPTL()->level_idc;
-//     par->mfx.CodecLevel |=
-//         seq->m_pcPTL.GetGeneralPTL()->tier_flag ? MFX_TIER_MPEG2_HIGH : MFX_TIER_MPEG2_MAIN;
-
-    par->mfx.MaxDecFrameBuffering = (mfxU16)seq->sps_max_dec_pic_buffering[0];
-
-    // CodecProfile can't be UNKNOWN here (it comes from SPS), that's asserted at CalculateFourcc
-    par->mfx.FrameInfo.FourCC = CalculateFourcc(par->mfx.CodecProfile, &par->mfx.FrameInfo);
+    par->mfx.FrameInfo.FourCC = MFX_FOURCC_NV12;
 
     par->mfx.DecodedOrder = 0;
 
+/*
     // video signal section
     mfxExtVideoSignalInfo * videoSignal = (mfxExtVideoSignalInfo *)GetExtendedBuffer(par->ExtParam, par->NumExtParam, MFX_EXTBUFF_VIDEO_SIGNAL_INFO);
     if (videoSignal)
@@ -374,24 +349,6 @@ UMC::Status FillVideoParam(const MPEG2SequenceHeader * seq, const MPEG2SequenceE
         videoSignal->TransferCharacteristics = (mfxU16)seq->transfer_characteristics;
         videoSignal->MatrixCoefficients = (mfxU16)seq->matrix_coeffs;
     }
-
-//     mfxExtMPEG2Param * mpeg2Param = (mfxExtMPEG2Param *)GetExtendedBuffer(par->ExtParam, par->NumExtParam, MFX_EXTBUFF_MPEG2_PARAM);
-//     if (hevcParam)
-//     {
-//         hevcParam->PicWidthInLumaSamples = (mfxU16) (seq->pic_width_in_luma_samples);
-//         hevcParam->PicHeightInLumaSamples = (mfxU16) (seq->pic_height_in_luma_samples);
-//
-//         hevcParam->GeneralConstraintFlags = 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->max_12bit_constraint_flag ? MFX_MPEG2_CONSTR_REXT_MAX_12BIT : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->max_10bit_constraint_flag ? MFX_MPEG2_CONSTR_REXT_MAX_10BIT : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->max_8bit_constraint_flag ? MFX_MPEG2_CONSTR_REXT_MAX_8BIT : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->max_422chroma_constraint_flag ? MFX_MPEG2_CONSTR_REXT_MAX_422CHROMA : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->max_420chroma_constraint_flag ? MFX_MPEG2_CONSTR_REXT_MAX_420CHROMA : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->max_monochrome_constraint_flag ? MFX_MPEG2_CONSTR_REXT_MAX_MONOCHROME : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->intra_constraint_flag ? MFX_MPEG2_CONSTR_REXT_INTRA : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->one_picture_only_constraint_flag ? MFX_MPEG2_CONSTR_REXT_ONE_PICTURE_ONLY : 0;
-//         hevcParam->GeneralConstraintFlags |= seq->getPTL()->GetGeneralPTL()->lower_bit_rate_constraint_flag ? MFX_MPEG2_CONSTR_REXT_LOWER_BIT_RATE : 0;
-//     }
 */
     return UMC::UMC_OK;
 }

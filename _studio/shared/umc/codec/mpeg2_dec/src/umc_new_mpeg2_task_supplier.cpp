@@ -915,33 +915,45 @@ UMC::Status TaskSupplier_MPEG2::GetInfo(UMC::VideoDecoderParams *lpInfo)
     lpInfo->info.clip_info.height = seq->horizontal_size_value;
     lpInfo->info.clip_info.width = seq->vertical_size_value;
 
-/*
-    if (0.0 < m_local_delta_frame_time)
-    {
-        lpInfo->info.framerate = 1.0 / m_local_delta_frame_time;
-    }
-    else
-    {
-        lpInfo->info.framerate = 0;
-    }
+    mfxU32 frameRateExtN, frameRateExtD;
+    GetMfxFrameRate(seqExt->frame_rate_code, frameRateExtN, frameRateExtD);
 
-    lpInfo->profile = sps->m_pcPTL.GetGeneralPTL()->profile_idc;
-    lpInfo->level = sps->m_pcPTL.GetGeneralPTL()->level_idc;
+    lpInfo->info.framerate = frameRateExtN/frameRateExtD;
+
+    // Table 8-1 – Meaning of bits in profile_and_level_indication
+    lpInfo->profile = GetMfxCodecProfile((seqExt->profile_and_level_indication >> 4) & 7);
+    lpInfo->level = GetMfxCodecLevel(seqExt->profile_and_level_indication & 0xF);
 
     lpInfo->numThreads = m_iThreadNum;
-    lpInfo->info.color_format = GetUMCColorFormat_MPEG2(sps->chroma_format_idc);
 
-    lpInfo->info.profile = sps->m_pcPTL.GetGeneralPTL()->profile_idc;
-    lpInfo->info.level = sps->m_pcPTL.GetGeneralPTL()->level_idc;
+    lpInfo->info.color_format = GetUMCColorFormat_MPEG2(seqExt->chroma_format);
 
-    lpInfo->info.aspect_ratio_width  = sps->sar_width;
-    lpInfo->info.aspect_ratio_height = sps->sar_height;
+    uint16_t aspectRatioW, aspectRatioH;
+    CalcAspectRatio(seq->aspect_ratio_information, seq->horizontal_size_value, seq->vertical_size_value,
+                    aspectRatioW, aspectRatioH);
 
-    uint32_t multiplier = 1 << (6 + sps->getHrdParameters()->bit_rate_scale);
-    lpInfo->info.bitrate = (sps->getHrdParameters()->GetHRDSubLayerParam(0)->bit_rate_value[0][0] - 1) * multiplier;
+    lpInfo->info.aspect_ratio_width  = aspectRatioW;
+    lpInfo->info.aspect_ratio_height = aspectRatioH;
 
-    lpInfo->info.interlace_type = UMC::PROGRESSIVE;
-*/
+    // bit_rate is a 30-bit integer. The lower 18 bits of the integer are in bit_rate_value and the upper 12 bits are in bit_rate_extension
+    uint64_t bitrate;
+    if (seqExt->bit_rate_extension)
+    {
+        bitrate = seq->bit_rate_value | (seqExt->bit_rate_extension << 18);
+
+        if (bitrate >= 0x40000000/100) // check if fit to 32u
+            bitrate = 0xffffffff;
+        else
+            bitrate *= 400;
+    }
+    else
+        bitrate = seq->bit_rate_value * 400;
+
+    lpInfo->info.bitrate = bitrate;
+
+    // UMC::INTERLEAVED_TOP_FIELD_FIRST actually should be UNKNOWN but we don't have this type
+    lpInfo->info.interlace_type = seqExt->progressive_sequence  ? UMC::PROGRESSIVE : UMC::INTERLEAVED_TOP_FIELD_FIRST;
+
     return UMC::UMC_OK;
 }
 
@@ -1085,7 +1097,7 @@ UMC::Status TaskSupplier_MPEG2::xDecodeSPS(MPEG2HeadersBitstream *bs)
     if(s != UMC::UMC_OK)
         return s;
 
-    if (sps.need16bitOutput && sps.m_pcPTL.GetGeneralPTL()->profile_idc == MPEG2_PROFILE_MAIN10 && sps.bit_depth_luma == 8 && sps.bit_depth_chroma == 8 &&
+    if (sps.need16bitOutput && sps.m_pcPTL.GetGeneralPTL()->profile_idc == MPEG2_PROFILE_MAIN10_REMOVE && sps.bit_depth_luma == 8 && sps.bit_depth_chroma == 8 &&
         m_initializationParams.info.color_format == UMC::NV12)
         sps.need16bitOutput = 0;
 
@@ -1168,8 +1180,8 @@ UMC::Status TaskSupplier_MPEG2::xDecodePPS(MPEG2HeadersBitstream * bs)
     if (pps.cross_component_prediction_enabled_flag && sps->ChromaArrayType != CHROMA_FORMAT_444)
         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
 
-    if (pps.chroma_qp_offset_list_enabled_flag && sps->ChromaArrayType == CHROMA_FORMAT_400)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+//     if (pps.chroma_qp_offset_list_enabled_flag && sps->ChromaArrayType == CHROMA_FORMAT_400)
+//         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
 
     if (pps.diff_cu_qp_delta_depth > sps->log2_max_luma_coding_block_size - sps->log2_min_luma_coding_block_size)
         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
@@ -2392,10 +2404,6 @@ UMC::Status TaskSupplier_MPEG2::InitFreeFrame(MPEG2DecoderFrame * pFrame, const 
     UMC::Status umcRes = UMC::UMC_OK;
     const MPEG2SeqParamSet *pSeqParam = pSlice->GetSeqParam();
 
-//    int32_t iMBCount = pSeqParam->frame_width_in_mbs * pSeqParam->frame_height_in_mbs;
-    //int32_t iCUCount = pSeqParam->WidthInCU * pSeqParam->HeightInCU;
-    //pFrame->m_CodingData->m_NumCUsInFrame = iCUCount;
-
     pFrame->m_FrameType = SliceTypeToFrameType(pSlice->GetSliceHeader()->slice_type);
     pFrame->m_dFrameTime = pSlice->m_source.GetTime();
     pFrame->m_crop_left = pSeqParam->conf_win_left_offset + pSeqParam->def_disp_win_left_offset;
@@ -2415,12 +2423,6 @@ UMC::Status TaskSupplier_MPEG2::InitFreeFrame(MPEG2DecoderFrame * pFrame, const 
 
     int32_t bit_depth = MFX_MAX(bit_depth_luma, bit_depth_chroma);
 
-//    int32_t iMBWidth = pSeqParam->frame_width_in_mbs;
-    //int32_t iCUWidth = pSeqParam->WidthInCU;
-//    int32_t iMBHeight = pSeqParam->frame_height_in_mbs;
-    //int32_t iCUHeight = pSeqParam->HeightInCU;
-//    mfxSize dimensions = {iMBWidth * 16, iMBHeight * 16};
-    //mfxSize dimensions = {iCUWidth * pSeqParam->MaxCUWidth, iCUHeight * pSeqParam->MaxCUHeight};
     mfxSize dimensions = {static_cast<int>(pSeqParam->pic_width_in_luma_samples), static_cast<int>(pSeqParam->pic_height_in_luma_samples)};
 
     UMC::ColorFormat cf = GetUMCColorFormat_MPEG2(chroma_format_idc);
@@ -2704,6 +2706,119 @@ int32_t CalculateDPBSize(uint32_t /*profile_idc*/, uint32_t &level_idc, int32_t 
 
     return MaxDpbSize;
 }
+
+// Table 6-4 – frame_rate_value
+void GetMfxFrameRate(uint8_t frame_rate_value, mfxU32 & frameRateN, mfxU32 & frameRateD)
+{
+    switch (frame_rate_value)
+    {
+        case 0:  frameRateN = 30;    frameRateD = 1;    break;
+        case 1:  frameRateN = 24000; frameRateD = 1001; break;
+        case 2:  frameRateN = 24;    frameRateD = 1;    break;
+        case 3:  frameRateN = 25;    frameRateD = 1;    break;
+        case 4:  frameRateN = 30000; frameRateD = 1001; break;
+        case 5:  frameRateN = 30;    frameRateD = 1;    break;
+        case 6:  frameRateN = 50;    frameRateD = 1;    break;
+        case 7:  frameRateN = 60000; frameRateD = 1001; break;
+        case 8:  frameRateN = 60;    frameRateD = 1;    break;
+        default: frameRateN = 30;    frameRateD = 1;
+    }
+    return;
+}
+
+
+// Table 8-3 – Level identification
+mfxU8 GetMfxCodecLevel(uint8_t level)
+{
+    switch (level)
+    {
+        case 10:
+            return MFX_LEVEL_MPEG2_LOW;
+        case 8:
+            return MFX_LEVEL_MPEG2_MAIN;
+        case 6:
+            return MFX_LEVEL_MPEG2_HIGH1440;
+        case 4:
+            return MFX_LEVEL_MPEG2_HIGH;
+        default:
+            return MFX_LEVEL_UNKNOWN;
+    }
+}
+// Table 8-2 – Profile identification
+mfxU8 GetMfxCodecProfile(uint8_t profile)
+{
+    switch (profile)
+    {
+        case 5:
+            return MFX_PROFILE_MPEG2_SIMPLE;
+        case 4:
+            return MFX_PROFILE_MPEG2_MAIN;
+        case 1:
+            return MFX_PROFILE_MPEG2_HIGH;
+        default:
+            return MFX_PROFILE_UNKNOWN;
+    }
+}
+
+bool DARtoPAR(uint32_t width, uint32_t height, uint32_t dar_h, uint32_t dar_v,
+              uint16_t & par_h, uint16_t &par_v)
+{
+    uint32_t simple_tab[] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59};
+
+    uint32_t h = dar_h * height;
+    uint32_t v = dar_v * width;
+
+    // remove common multipliers
+    while ( ((h|v)&1) == 0 )
+    {
+        h >>= 1;
+        v >>= 1;
+    }
+
+    uint32_t denom;
+    for (uint32_t i=0; i < (uint32_t)(sizeof(simple_tab)/sizeof(simple_tab[0])); ++i)
+    {
+        denom = simple_tab[i];
+        while(h%denom==0 && v%denom==0)
+        {
+            v /= denom;
+            h /= denom;
+        }
+        if (v <= denom || h <= denom)
+            break;
+    }
+    par_h = h;
+    par_v = v;
+
+    return true;
+}
+
+
+bool CalcAspectRatio(uint32_t dar_code, uint32_t width, uint32_t height,
+                    uint16_t & aspectRatioW, uint16_t & aspectRatioH)
+{
+    bool ret = true;
+
+    if (dar_code == 2)
+    {
+        ret = DARtoPAR(width, height, 4, 3, aspectRatioW, aspectRatioH);
+    }
+    else if (dar_code == 3)
+    {
+        ret = DARtoPAR(width, height, 16, 9, aspectRatioW, aspectRatioH);
+    }
+    else if (dar_code == 4)
+    {
+        ret = DARtoPAR(width, height, 221, 100, aspectRatioW, aspectRatioH);
+    }
+    else // dar_code == 1 or unknown
+    {
+        aspectRatioW = 1;
+        aspectRatioH = 1;
+    }
+    return ret;
+}
+
 
 
 } // namespace UMC_MPEG2_DECODER
