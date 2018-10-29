@@ -186,6 +186,8 @@ public:
         , m_SequenceParam(pObjHeap)
         , m_SequenceParamExt(pObjHeap)
         , m_SequenceDisplayExt(pObjHeap)
+        , m_PictureParam(pObjHeap)
+        , m_PictureParamExt(pObjHeap)
         , m_pObjHeap(pObjHeap)
     {
     }
@@ -200,6 +202,8 @@ public:
         m_SequenceParam.Reset(isPartialReset);
         m_SequenceParamExt.Reset(isPartialReset);
         m_SequenceDisplayExt.Reset(isPartialReset);
+        m_PictureParam.Reset(isPartialReset);
+        m_PictureParamExt.Reset(isPartialReset);
     }
 
     HeaderSet<MPEG2VideoParamSet>           m_VideoParams;
@@ -210,6 +214,8 @@ public:
     HeaderSet<MPEG2SequenceHeader>            m_SequenceParam;
     HeaderSet<MPEG2SequenceExtension>         m_SequenceParamExt;
     HeaderSet<MPEG2SequenceDisplayExtension>  m_SequenceDisplayExt;
+    HeaderSet<MPEG2PictureHeader>             m_PictureParam;
+    HeaderSet<MPEG2PictureHeaderExtension>    m_PictureParamExt;
 private:
     Heap_Objects  *m_pObjHeap;
 };

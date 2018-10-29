@@ -245,6 +245,13 @@ enum NalUnitTypeExt
   NAL_UT_EXT_PICTURE_TEMPORAL_SCALABLE_EXTENSION = 10,
 };
 
+enum FrameType
+{
+    MPEG2_I_PICTURE = 1,
+    MPEG2_P_PICTURE = 2,
+    MPEG2_B_PICTURE = 3
+};
+
 // Slice types
 enum SliceType
 {
@@ -1290,6 +1297,16 @@ struct MPEG2SliceHeader
     int32_t wNumBitsForShortTermRPSInSlice;  // used in h/w decoder
 }; // MPEG2SliceHeader
 
+struct MPEG2SliceHeader_
+{
+    uint8_t slice_vertical_position;
+    uint8_t slice_vertical_position_extension;
+    uint8_t priority_breakpoint;
+    uint8_t quantiser_scale_code;
+    uint8_t intra_slice_flag;
+    uint8_t intra_slice;
+};
+
 // SEI data storage
 struct MPEG2SEIPayLoadBase
 {
@@ -1499,6 +1516,100 @@ struct MPEG2SequenceDisplayExtension : public HeapObject, public MPEG2SequenceDi
         return 0;
     }
 };
+
+struct MPEG2PictureHeaderBase
+{
+    uint16_t temporal_reference;
+    uint8_t  picture_coding_type;
+    uint16_t vbv_delay;
+    uint8_t  full_pel_forward_vector;
+    uint8_t  forward_f_code;
+    uint8_t  full_pel_backward_vector;
+    uint8_t  backward_f_code;
+
+    void Reset()
+    {
+        MPEG2PictureHeaderBase p = {};
+        *this = p;
+    }
+};
+
+struct MPEG2PictureHeader : public HeapObject, public MPEG2PictureHeaderBase
+{
+
+    MPEG2PictureHeader()
+        : MPEG2PictureHeaderBase()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        MPEG2PictureHeaderBase::Reset();
+    }
+
+    ~MPEG2PictureHeader()
+    {
+    }
+
+    int32_t GetID() const
+    {
+        return 0;
+    }
+};
+
+struct MPEG2PictureExtensionBase
+{
+    uint8_t f_code[2][2];
+    uint8_t intra_dc_precision;
+    uint8_t picture_structure;
+    uint8_t top_field_first;
+    uint8_t frame_pred_frame_dct;
+    uint8_t concealment_motion_vectors;
+    uint8_t q_scale_type;
+    uint8_t intra_vlc_format;
+    uint8_t alternate_scan;
+    uint8_t repeat_first_field;
+    uint8_t chroma_420_type;
+    uint8_t progressive_frame;
+    uint8_t composite_display_flag;
+    uint8_t v_axis;
+    uint8_t field_sequence;
+    uint8_t sub_carrier;
+    uint8_t burst_amplitude;
+    uint8_t sub_carrier_phase;
+
+    void Reset()
+    {
+        MPEG2PictureExtensionBase p = {};
+        *this = p;
+    }
+};
+
+struct MPEG2PictureHeaderExtension : public HeapObject, public MPEG2PictureExtensionBase
+{
+
+    MPEG2PictureHeaderExtension()
+        : MPEG2PictureExtensionBase()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        MPEG2PictureExtensionBase::Reset();
+    }
+
+    ~MPEG2PictureHeaderExtension()
+    {
+    }
+
+    int32_t GetID() const
+    {
+        return 0;
+    }
+};
+
 
 /*********************MPEG2*********************/
 

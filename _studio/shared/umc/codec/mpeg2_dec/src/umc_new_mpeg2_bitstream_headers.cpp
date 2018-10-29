@@ -343,6 +343,63 @@ void MPEG2HeadersBitstream::GetSequenceDisplayExtension(MPEG2SequenceDisplayExte
     dispExt->display_vertical_size = GetBits(14);
 }
 
+void MPEG2HeadersBitstream::GetPictureHeader(MPEG2PictureHeader *pic)
+{
+    pic->temporal_reference = GetBits(10);
+
+    pic->picture_coding_type = GetBits(3);
+    if (pic->picture_coding_type > MPEG2_B_PICTURE || pic->picture_coding_type < MPEG2_I_PICTURE)
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    pic->vbv_delay = GetBits(16);
+
+    if (pic->picture_coding_type == MPEG2_P_PICTURE || pic->picture_coding_type == MPEG2_B_PICTURE)
+    {
+        pic->full_pel_forward_vector = GetBits(1);
+        pic->forward_f_code = GetBits(3);
+    }
+
+    if (pic->picture_coding_type == MPEG2_B_PICTURE)
+    {
+        pic->full_pel_backward_vector = GetBits(1);
+        pic->backward_f_code = GetBits(3);
+    }
+    /*
+    while (GetBits(1))
+    {
+        uint8_t extra_information_picture = GetBits(8);
+    }
+    */
+}
+
+void MPEG2HeadersBitstream::GetPictureExtensionHeader(MPEG2PictureHeaderExtension *picExt)
+{
+    picExt->f_code[0][0] = GetBits(4); // forward horizontal
+    picExt->f_code[0][1] = GetBits(4); // forward vertical
+    picExt->f_code[1][0] = GetBits(4); // backward horizontal
+    picExt->f_code[1][1] = GetBits(4); // backward vertical
+    picExt->intra_dc_precision = GetBits(2);
+    picExt->picture_structure = GetBits(2);
+    picExt->top_field_first = GetBits(1);
+    picExt->frame_pred_frame_dct = GetBits(1);
+    picExt->concealment_motion_vectors = GetBits(1);
+    picExt->q_scale_type = GetBits(1);
+    picExt->intra_vlc_format = GetBits(1);
+    picExt->alternate_scan = GetBits(1);
+    picExt->repeat_first_field = GetBits(1);
+    picExt->chroma_420_type = GetBits(1);
+    picExt->progressive_frame = GetBits(1);
+    picExt->composite_display_flag = GetBits(1);
+    if (picExt->composite_display_flag)
+    {
+        picExt->v_axis = GetBits(1);
+        picExt->field_sequence = GetBits(3);
+        picExt->sub_carrier = GetBits(1);
+        picExt->burst_amplitude = GetBits(7);
+        picExt->sub_carrier_phase = GetBits(8);
+    }
+}
+
 /*********************************MPEG2******************************************/
 
 // Part VPS header
@@ -1507,6 +1564,50 @@ void MPEG2HeadersBitstream::xParsePredWeightTable(const MPEG2SeqParamSet *sps, M
     }
 }
 
+UMC::Status MPEG2HeadersBitstream::GetSliceHeader(MPEG2SliceHeader_ * sliceHdr, const MPEG2SequenceHeader *seq, const MPEG2SequenceExtension * seqExt)
+{
+    if (!sliceHdr)
+        throw mpeg2_exception(UMC::UMC_ERR_NULL_PTR);
+
+    sliceHdr->slice_vertical_position = GetBits(8);
+
+    uint16_t vertical_size = seq->vertical_size_value | (seqExt->vertical_size_extension << 14);
+
+    if (vertical_size > 2800)
+    {
+        sliceHdr->slice_vertical_position_extension = GetBits(3);
+    }
+
+    /* FIXME
+    if((sequenceHeader.extension_start_code_ID[task_num] == SEQUENCE_SCALABLE_EXTENSION_ID) &&
+        (sequenceHeader.scalable_mode[task_num] == DATA_PARTITIONING))
+    {
+        GET_TO9BITS(video->bs, 7, code)
+        return UMC_ERR_UNSUPPORTED;
+    }
+    */
+    sliceHdr->quantiser_scale_code = GetBits(5);
+    if (!sliceHdr->quantiser_scale_code)
+        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
+
+    sliceHdr->intra_slice_flag = GetBits(1);
+    if (sliceHdr->intra_slice_flag)
+    {
+        sliceHdr->intra_slice = GetBits(1);
+        GetBits(7); // reserved_bits
+
+        bool nextBit = GetBits(1);
+        while (nextBit)
+        {
+            GetBits(1);  // extra_bit_slice
+            GetBits(8);  // extra_information_slice
+        }
+    }
+    GetBits(1);  // extra_bit_slice
+
+    return UMC::UMC_OK;
+}
+
 // Parse slice header part which contains PPS ID
 UMC::Status MPEG2HeadersBitstream::GetSliceHeaderPart1(MPEG2SliceHeader * sliceHdr)
 {
@@ -2103,15 +2204,14 @@ void MPEG2HeadersBitstream::decodeSlice(MPEG2Slice *pSlice, const MPEG2SeqParamS
 }
 
 // Parse full slice header
-UMC::Status MPEG2HeadersBitstream::GetSliceHeaderFull(MPEG2Slice *rpcSlice, const MPEG2SeqParamSet *sps, const MPEG2PicParamSet *pps)
+UMC::Status MPEG2HeadersBitstream::GetSliceHeaderFull(MPEG2Slice *rpcSlice, const MPEG2SequenceHeader * seq, const MPEG2SequenceExtension * seqExt)
 {
     if (!rpcSlice)
         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
 
-    UMC::Status sts = GetSliceHeaderPart1(rpcSlice->GetSliceHeader());
+    UMC::Status sts = GetSliceHeader(rpcSlice->GetSliceHeader_(), seq, seqExt);
     if (UMC::UMC_OK != sts)
         return sts;
-    decodeSlice(rpcSlice, sps, pps);
 
     if (CheckBSLeft())
         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);

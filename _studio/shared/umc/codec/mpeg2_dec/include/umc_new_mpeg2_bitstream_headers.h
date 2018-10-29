@@ -308,8 +308,9 @@ public:
     void decodeSlice(MPEG2Slice *, const MPEG2SeqParamSet *, const MPEG2PicParamSet *);
     // Parse slice header part which contains PPS ID
     UMC::Status GetSliceHeaderPart1(MPEG2SliceHeader * sliceHdr);
+    UMC::Status GetSliceHeader(MPEG2SliceHeader_ * sliceHdr, const MPEG2SequenceHeader *, const MPEG2SequenceExtension *);
     // Parse full slice header
-    UMC::Status GetSliceHeaderFull(MPEG2Slice *, const MPEG2SeqParamSet *, const MPEG2PicParamSet *);
+    UMC::Status GetSliceHeaderFull(MPEG2Slice *, const MPEG2SequenceHeader *, const MPEG2SequenceExtension *);
 
     // Parse scaling list information in SPS or PPS
     void parseScalingList(MPEG2ScalingList *);
@@ -325,6 +326,12 @@ public:
 
     // Parse sequence display extension
     void GetSequenceDisplayExtension(MPEG2SequenceDisplayExtension *dispExt);
+
+    // Parse picture header
+    void GetPictureHeader(MPEG2PictureHeader *pic);
+
+    // Parse picture extension
+    void GetPictureExtensionHeader(MPEG2PictureHeaderExtension *picExt);
 /*********************************MPEG2******************************************/
     // Part VPS header
     UMC::Status GetVideoParamSet(MPEG2VideoParamSet *vps);

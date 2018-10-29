@@ -1085,6 +1085,29 @@ UMC::Status TaskSupplier_MPEG2::xDecodeSequenceDisplayExt(MPEG2HeadersBitstream 
     return UMC::UMC_OK;
 }
 
+
+UMC::Status TaskSupplier_MPEG2::xDecodePictureHeader(MPEG2HeadersBitstream *bs)
+{
+    MPEG2PictureHeader pic;
+
+    bs->GetPictureHeader(&pic);
+
+    m_Headers.m_PictureParam.AddHeader(&pic);
+
+    return UMC::UMC_OK;
+}
+
+UMC::Status TaskSupplier_MPEG2::xDecodePictureHeaderExt(MPEG2HeadersBitstream *bs)
+{
+    MPEG2PictureHeaderExtension picExt;
+
+    bs->GetPictureExtensionHeader(&picExt);
+
+    m_Headers.m_PictureParamExt.AddHeader(&picExt);
+
+    return UMC::UMC_OK;
+}
+
 // Decode video parameters set NAL unit
 UMC::Status TaskSupplier_MPEG2::xDecodeVPS(MPEG2HeadersBitstream *bs)
 {
@@ -1443,6 +1466,9 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
         case NAL_UT_SEQUENCE_HEADER:
             umcRes = xDecodeSequenceHeader(&bitStream);
             break;
+        case NAL_UT_PICTURE_HEADER:
+            umcRes = xDecodePictureHeader(&bitStream);
+            break;
         case NAL_UT_EXTENSION:
         {
 
@@ -1454,6 +1480,9 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
                 break;
             case NAL_UT_EXT_SEQUENCE_DISPLAY_EXTENSION:
                 umcRes = xDecodeSequenceDisplayExt(&bitStream);
+                break;
+            case NAL_UT_EXT_PICTURE_CODING_EXTENSION:
+                umcRes = xDecodePictureHeaderExt(&bitStream);
                 break;
             default:
                 break;
@@ -1710,10 +1739,11 @@ UMC::Status TaskSupplier_MPEG2::ProcessNalUnit(UMC::MediaDataEx *nalUnit)
     switch(unitType)
     {
     case NAL_UT_SEQUENCE_HEADER:
+    case NAL_UT_PICTURE_HEADER:
     case NAL_UT_EXTENSION:
         umcRes = DecodeHeaders(nalUnit);
         break;
-
+/*
     case NAL_UT_CODED_SLICE_TRAIL_R:
     case NAL_UT_CODED_SLICE_TRAIL_N:
     case NAL_UT_CODED_SLICE_TLA_R:
@@ -1745,10 +1775,15 @@ UMC::Status TaskSupplier_MPEG2::ProcessNalUnit(UMC::MediaDataEx *nalUnit)
     case NAL_UT_AU_DELIMITER:
         umcRes = AddSlice(0, false);
         break;
-
+*/
     default:
         break;
     };
+    if (unitType >= 0x1 && unitType <= 0xAF)
+    {
+        if (MPEG2Slice * pSlice = DecodeSliceHeader(nalUnit))
+            umcRes = AddSlice(pSlice, false);
+    }
 
     return umcRes;
 }
@@ -1953,11 +1988,13 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
 MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
 {
     MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_HOTSPOTS, "TaskSupplier_MPEG2::DecodeSliceHeader");
-    if ((0 > m_Headers.m_SeqParams.GetCurrentID()) ||
-        (0 > m_Headers.m_PicParams.GetCurrentID()))
+
+    if ((0 > m_Headers.m_SequenceParam.GetCurrentID()) ||
+        (0 > m_Headers.m_SequenceParamExt.GetCurrentID()))
     {
         return 0;
     }
+
 
     MPEG2Slice * pSlice = m_ObjHeap.AllocateObject<MPEG2Slice>();
     pSlice->IncrementReference();
@@ -1975,32 +2012,29 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
     SwapperBase * swapper = m_pNALSplitter->GetSwapper();
     swapper->SwapMemory(&pSlice->m_source, &memCopy, &removed_offsets);
 
-    int32_t pps_pid = pSlice->RetrievePicParamSetNumber();
-    if (pps_pid == -1)
+    pSlice->SetSeqHeader(m_Headers.m_SequenceParam.GetCurrentHeader());
+    if (!pSlice->GetSeqHeader())
     {
         return 0;
     }
 
-    pSlice->SetPicParam(m_Headers.m_PicParams.GetHeader(pps_pid));
-    MPEG2PicParamSet const* pps = pSlice->GetPicParam();
-    if (!pps)
+    pSlice->SetSeqHeaderExt(m_Headers.m_SequenceParamExt.GetCurrentHeader());
+    if (!pSlice->GetSeqHeaderExt())
     {
         return 0;
     }
 
-    int32_t seq_parameter_set_id = pps->pps_seq_parameter_set_id;
-
-    pSlice->SetSeqParam(m_Headers.m_SeqParams.GetHeader(seq_parameter_set_id));
-    if (!pSlice->GetSeqParam())
+    pSlice->SetPicHeader(m_Headers.m_PictureParam.GetCurrentHeader());
+    if (!pSlice->GetPicHeader())
     {
         return 0;
     }
 
-    // do not need vps
-    //MPEG2VideoParamSet * vps = m_Headers.m_VideoParams.GetHeader(pSlice->GetSeqParam()->sps_video_parameter_set_id);
-
-    m_Headers.m_SeqParams.SetCurrentID(pps->pps_seq_parameter_set_id);
-    m_Headers.m_PicParams.SetCurrentID(pps->pps_pic_parameter_set_id);
+    pSlice->SetPicHeaderExt(m_Headers.m_PictureParamExt.GetCurrentHeader());
+    if (!pSlice->GetPicHeaderExt())
+    {
+        return 0;
+    }
 
     pSlice->m_pCurrentFrame = NULL;
 
@@ -2022,78 +2056,9 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
         return 0;
     }
 
-    m_prevSliceBroken = false;
-
-    if (m_WaitForIDR)
-    {
-        if (pps->pps_curr_pic_ref_enabled_flag)
-        {
-            ReferencePictureSet const* rps = pSlice->getRPS();
-            VM_ASSERT(rps);
-
-            uint32_t const numPicTotalCurr = rps->getNumberOfUsedPictures();
-            if (numPicTotalCurr)
-                return 0;
-        }
-        else if (sliceHdr->slice_type != I_SLICE)
-        {
-            return 0;
-        }
-    }
-
-    ActivateHeaders(const_cast<MPEG2SeqParamSet *>(pSlice->GetSeqParam()), const_cast<MPEG2PicParamSet *>(pps));
-
     uint32_t currOffset = sliceHdr->m_HeaderBitstreamOffset;
     uint32_t currOffsetWithEmul = currOffset;
 
-    size_t headersEmuls = 0;
-    for (; headersEmuls < removed_offsets.size(); headersEmuls++)
-    {
-        if (removed_offsets[headersEmuls] < currOffsetWithEmul)
-            currOffsetWithEmul++;
-        else
-            break;
-    }
-
-    // Update entry points
-    size_t offsets = removed_offsets.size();
-    if ((pSlice->GetPicParam()->tiles_enabled_flag || pSlice->GetPicParam()->entropy_coding_sync_enabled_flag) &&
-        pSlice->getTileLocationCount() > 0 && offsets > 0)
-    {
-        uint32_t removed_bytes = 0;
-        std::vector<uint32_t>::iterator it = removed_offsets.begin();
-        uint32_t emul_offset = *it;
-
-        for (uint32_t tile = 0; tile < pSlice->getTileLocationCount(); tile++)
-        {
-            while ((pSlice->m_tileByteLocation[tile] + currOffsetWithEmul >= emul_offset) && removed_bytes < offsets)
-            {
-                removed_bytes++;
-                if (removed_bytes < offsets)
-                {
-                    it++;
-                    emul_offset = *it;
-                }
-                else
-                    break;
-            }
-
-            // 1st tile start offset is length of slice header, it should not be corrected because it is
-            // not specified in slice header, it is calculated by parsing a modified bitstream instead
-            if (0 == tile)
-            {
-                offsets -= removed_bytes;
-                removed_bytes = 0;
-            }
-            else
-                pSlice->m_tileByteLocation[tile] = pSlice->m_tileByteLocation[tile] - removed_bytes;
-        }
-    }
-
-    for (uint32_t tile = 0; tile < pSlice->getTileLocationCount(); tile++)
-    {
-        pSlice->m_tileByteLocation[tile] = pSlice->m_tileByteLocation[tile] + currOffset;
-    }
 
     m_WaitForIDR = false;
     memory_leak_preventing_slice.ClearNotification();
