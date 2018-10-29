@@ -99,6 +99,10 @@ public:
     // Obtain pointer to slice header
     const MPEG2SliceHeader *GetSliceHeader() const {return &m_SliceHeader;}
     MPEG2SliceHeader *GetSliceHeader() {return &m_SliceHeader;}
+
+    const MPEG2SliceHeader_ *GetSliceHeader_() const {return &m_SliceHeader_;}
+    MPEG2SliceHeader_ *GetSliceHeader_() {return &m_SliceHeader_;}
+
     int32_t GetFirstMB() const {return m_iFirstMB;}
     // Obtain current picture parameter set
     const MPEG2PicParamSet *GetPicParam() const {return m_pPicParamSet;}
@@ -115,6 +119,38 @@ public:
         m_pSeqParamSet = sps;
         if (m_pSeqParamSet)
             m_pSeqParamSet->IncrementReference();
+    }
+    //
+    const MPEG2SequenceHeader *GetSeqHeader(void) const {return m_pSequenceParam;}
+    void SetSeqHeader(const MPEG2SequenceHeader * seq)
+    {
+        m_pSequenceParam = seq;
+        if (m_pSequenceParam)
+            m_pSequenceParam->IncrementReference();
+    }
+    //
+    const MPEG2SequenceExtension *GetSeqHeaderExt(void) const {return m_pSequenceParamExt;}
+    void SetSeqHeaderExt(const MPEG2SequenceExtension * seqExt)
+    {
+        m_pSequenceParamExt = seqExt;
+        if (m_pSequenceParamExt)
+            m_pSequenceParamExt->IncrementReference();
+    }
+    //
+    const MPEG2PictureHeader *GetPicHeader(void) const {return m_pPictureParam;}
+    void SetPicHeader(const MPEG2PictureHeader * pic)
+    {
+        m_pPictureParam = pic;
+        if (m_pPictureParam)
+            m_pPictureParam->IncrementReference();
+    }
+    //
+    const MPEG2PictureHeaderExtension *GetPicHeaderExt(void) const {return m_pPictureParamExt;}
+    void SetPicHeaderExt(const MPEG2PictureHeaderExtension * picExt)
+    {
+        m_pPictureParamExt = picExt;
+        if (m_pPictureParamExt)
+            m_pPictureParamExt->IncrementReference();
     }
 
     // Obtain current destination frame
@@ -136,7 +172,7 @@ public:
 
     MemoryPiece m_source;                                 // (MemoryPiece *) pointer to owning memory piece
 
-public:  // DEBUG !!!! should remove dependence
+public:
 
     // Initialize slice structure to default values
     virtual void Reset();
@@ -146,8 +182,10 @@ public:  // DEBUG !!!! should remove dependence
 
     // Decoder slice header and calculate POC
     virtual bool DecodeSliceHeader(PocDecoding * pocDecoding);
+    virtual bool DecodeSliceHeader();
 
     MPEG2SliceHeader m_SliceHeader;                              // (MPEG2SliceHeader) slice header
+    MPEG2SliceHeader_ m_SliceHeader_;
 
     MPEG2HeadersBitstream m_BitStream;                                  // (MPEG2Bitstream) slice bit stream
 
@@ -157,6 +195,11 @@ public:  // DEBUG !!!! should remove dependence
 protected:
     const MPEG2PicParamSet* m_pPicParamSet;                      // (MPEG2PicParamSet *) pointer to array of picture parameters sets
     const MPEG2SeqParamSet* m_pSeqParamSet;                      // (MPEG2SeqParamSet *) pointer to array of sequence parameters sets
+
+    const MPEG2SequenceHeader*         m_pSequenceParam;
+    const MPEG2SequenceExtension*      m_pSequenceParamExt;
+    const MPEG2PictureHeader*          m_pPictureParam;
+    const MPEG2PictureHeaderExtension* m_pPictureParamExt;
 public:
     MPEG2DecoderFrame *m_pCurrentFrame;        // (MPEG2DecoderFrame *) pointer to destination frame
 

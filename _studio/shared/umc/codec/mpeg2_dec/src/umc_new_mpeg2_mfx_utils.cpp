@@ -481,6 +481,79 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
 
         UMC::MediaDataEx *nalUnit = m_supplier->GetNalUnit(data);
 
+/*
+        switch (startCode)
+        {
+        case NAL_UT_PICTURE_HEADER:
+            printf("NAL_UT_PICTURE_HEADER\n");
+            break;
+        case NAL_UT_USER_DATA:
+            printf("NAL_UT_USER_DATA\n");
+            break;
+        case NAL_UT_SEQUENCE_ERROR:
+            printf("NAL_UT_SEQUENCE_ERROR\n");
+            break;
+        case NAL_UT_SEQUENCE_END:
+            printf("NAL_UT_SEQUENCE_END\n");
+            break;
+        case NAL_UT_GROUP:
+            printf("NAL_UT_GROUP\n");
+            break;
+        case NAL_UT_SEQUENCE_HEADER:
+            printf("NAL_UT_GROUP\n");
+            break;
+        case NAL_UT_EXTENSION:
+            printf("NAL_UT_EXTENSION: ");
+            {
+                uint8_t const * const data = (uint8_t*)nalUnit->GetDataPointer();
+                NalUnitTypeExt extId = (NalUnitTypeExt) (data[1] >> 4);
+
+                switch (extId)
+                {
+                case NAL_UT_EXT_SEQUENCE_EXTENSION:
+                    printf("NAL_UT_EXT_SEQUENCE_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_SEQUENCE_DISPLAY_EXTENSION:
+                    printf("NAL_UT_EXT_SEQUENCE_DISPLAY_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_QUANT_MATRIX_EXTENSION:
+                    printf("NAL_UT_EXT_QUANT_MATRIX_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_COPYRIGHT_EXTENSION:
+                    printf("NAL_UT_EXT_COPYRIGHT_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_SEQUENCE_SCALABLE_EXTENSION:
+                    printf("NAL_UT_EXT_SEQUENCE_SCALABLE_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_PICTURE_DISPLAY_EXTENSION:
+                    printf("NAL_UT_EXT_PICTURE_DISPLAY_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_PICTURE_CODING_EXTENSION:
+                    printf("NAL_UT_EXT_PICTURE_CODING_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_PICTURE_SPARTIAL_SCALABLE_EXTENSION:
+                    printf("NAL_UT_EXT_PICTURE_SPARTIAL_SCALABLE_EXTENSION\n");
+                    break;
+                case NAL_UT_EXT_PICTURE_TEMPORAL_SCALABLE_EXTENSION:
+                    printf("NAL_UT_EXT_PICTURE_TEMPORAL_SCALABLE_EXTENSION\n");
+                    break;
+                default:
+                    abort();
+                    break;
+                }
+            }
+            break;
+        default:
+            if (startCode >= 0x1 && startCode <= 0xAF)
+                printf("SLICE\n");
+            else
+            {
+                printf("UNKNOWN\n");
+                abort();
+            }
+            break;
+        };
+*/
         switch (startCode)
         {
         case NAL_UT_PICTURE_HEADER:
@@ -514,7 +587,9 @@ UMC::Status HeadersAnalyzer::ProcessNalUnit(UMC::MediaData * data)
         {
             return UMC::UMC_ERR_NOT_ENOUGH_DATA;
         }
-
+/*
+        needProcess = true;
+*/
         if (needProcess)
         {
             try

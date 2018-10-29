@@ -115,7 +115,7 @@ bool MPEG2Slice::Reset(PocDecoding * pocDecoding)
     m_BitStream.Reset((uint8_t *) m_source.GetPointer(), (uint32_t) m_source.GetDataSize());
 
     // decode slice header
-    if (m_source.GetDataSize() && false == DecodeSliceHeader(pocDecoding))
+    if (m_source.GetDataSize() && false == DecodeSliceHeader())
         return false;
 
     m_SliceHeader.m_HeaderBitstreamOffset = (uint32_t)m_BitStream.BytesDecoded();
@@ -123,15 +123,15 @@ bool MPEG2Slice::Reset(PocDecoding * pocDecoding)
     m_SliceHeader.m_SeqParamSet = m_pSeqParamSet;
     m_SliceHeader.m_PicParamSet = m_pPicParamSet;
 
-    int32_t iMBInFrame = (GetSeqParam()->WidthInCU * GetSeqParam()->HeightInCU);
+    //int32_t iMBInFrame = (GetSeqParam()->WidthInCU * GetSeqParam()->HeightInCU);
 
     // set slice variables
-    m_iFirstMB = m_SliceHeader.slice_segment_address;
-    m_iFirstMB = m_iFirstMB > iMBInFrame ? iMBInFrame : m_iFirstMB;
-    m_iFirstMB = m_pPicParamSet->m_CtbAddrRStoTS[m_iFirstMB];
-    m_iMaxMB = iMBInFrame;
+    //m_iFirstMB = m_SliceHeader.slice_segment_address;
+    //m_iFirstMB = m_iFirstMB > iMBInFrame ? iMBInFrame : m_iFirstMB;
+    //m_iFirstMB = m_pPicParamSet->m_CtbAddrRStoTS[m_iFirstMB];
+    //m_iMaxMB = iMBInFrame;
 
-    processInfo.Initialize(m_iFirstMB, GetSeqParam()->WidthInCU);
+    //processInfo.Initialize(m_iFirstMB, GetSeqParam()->WidthInCU);
 
     m_bError = false;
 
@@ -147,6 +147,38 @@ void MPEG2Slice::SetSliceNumber(int32_t iSliceNumber)
     m_iNumber = iSliceNumber;
 
 } // void MPEG2Slice::SetSliceNumber(int32_t iSliceNumber)
+
+// Decoder slice header and calculate POC
+bool MPEG2Slice::DecodeSliceHeader()
+{
+    UMC::Status umcRes = UMC::UMC_OK;
+    // Locals for additional slice data to be read into, the data
+    // was read and saved from the first slice header of the picture,
+    // is not supposed to change within the picture, so can be
+    // discarded when read again here.
+    try
+    {
+        memset(reinterpret_cast<void*>(&m_SliceHeader_), 0, sizeof(m_SliceHeader_));
+/*
+        NalUnitType nal_unit_type;
+        umcRes = m_BitStream.GetNALUnitType(nal_unit_type);
+        if (UMC::UMC_OK != umcRes)
+            return false;
+
+        if (nal_unit_type < 0x1 || nal_unit_type > 0xAF)
+            return false;
+*/
+        umcRes = m_BitStream.GetSliceHeaderFull(this, m_pSequenceParam, m_pSequenceParamExt);
+
+    }
+    catch(...)
+    {
+        return false;
+    }
+
+    return (UMC::UMC_OK == umcRes);
+
+}
 
 // Decoder slice header and calculate POC
 bool MPEG2Slice::DecodeSliceHeader(PocDecoding * pocDecoding)
@@ -165,7 +197,7 @@ bool MPEG2Slice::DecodeSliceHeader(PocDecoding * pocDecoding)
         if (UMC::UMC_OK != umcRes)
             return false;
 
-        umcRes = m_BitStream.GetSliceHeaderFull(this, m_pSeqParamSet, m_pPicParamSet);
+       // umcRes = m_BitStream.GetSliceHeaderFull(this, m_pSeqParamSet, m_pPicParamSet);
 
         if (!GetSliceHeader()->dependent_slice_segment_flag)
         {
