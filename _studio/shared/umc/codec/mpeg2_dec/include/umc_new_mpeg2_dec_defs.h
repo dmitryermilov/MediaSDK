@@ -1297,16 +1297,6 @@ struct MPEG2SliceHeader
     int32_t wNumBitsForShortTermRPSInSlice;  // used in h/w decoder
 }; // MPEG2SliceHeader
 
-struct MPEG2SliceHeader_
-{
-    uint8_t slice_vertical_position;
-    uint8_t slice_vertical_position_extension;
-    uint8_t priority_breakpoint;
-    uint8_t quantiser_scale_code;
-    uint8_t intra_slice_flag;
-    uint8_t intra_slice;
-};
-
 // SEI data storage
 struct MPEG2SEIPayLoadBase
 {
@@ -1400,8 +1390,8 @@ struct MPEG2SequenceHeaderBase
 
     void Reset()
     {
-        MPEG2SequenceHeaderBase s = {};
-        *this = s;
+        MPEG2SequenceHeaderBase b = {};
+        *this = b;
     }
 };
 
@@ -1446,8 +1436,8 @@ struct MPEG2SequenceExtensionBase
 
     void Reset()
     {
-        MPEG2SequenceExtensionBase s = {};
-        *this = s;
+        MPEG2SequenceExtensionBase b = {};
+        *this = b;
     }
 };
 
@@ -1488,8 +1478,8 @@ struct MPEG2SequenceDisplayExtensionBase
 
     void Reset()
     {
-        MPEG2SequenceDisplayExtensionBase s = {};
-        *this = s;
+        MPEG2SequenceDisplayExtensionBase b = {};
+        *this = b;
     }
 };
 
@@ -1529,8 +1519,8 @@ struct MPEG2PictureHeaderBase
 
     void Reset()
     {
-        MPEG2PictureHeaderBase p = {};
-        *this = p;
+        MPEG2PictureHeaderBase b = {};
+        *this = b;
     }
 };
 
@@ -1560,7 +1550,7 @@ struct MPEG2PictureHeader : public HeapObject, public MPEG2PictureHeaderBase
 
 struct MPEG2PictureExtensionBase
 {
-    uint8_t f_code[2][2];
+    uint8_t f_code[4];
     uint8_t intra_dc_precision;
     uint8_t picture_structure;
     uint8_t top_field_first;
@@ -1581,8 +1571,8 @@ struct MPEG2PictureExtensionBase
 
     void Reset()
     {
-        MPEG2PictureExtensionBase p = {};
-        *this = p;
+        MPEG2PictureExtensionBase b = {};
+        *this = b;
     }
 };
 
@@ -1608,6 +1598,70 @@ struct MPEG2PictureHeaderExtension : public HeapObject, public MPEG2PictureExten
     {
         return 0;
     }
+};
+
+struct MPEG2QuantMatrixBase
+{
+    uint8_t load_intra_quantiser_matrix;
+    uint8_t intra_quantiser_matrix[64];
+    uint8_t load_non_intra_quantiser_matrix;
+    uint8_t non_intra_quantiser_matrix[64];
+    uint8_t load_chroma_intra_quantiser_matrix;
+    uint8_t chroma_intra_quantiser_matrix[64];
+    uint8_t load_chroma_non_intra_quantiser_matrix;
+    uint8_t chroma_non_intra_quantiser_matrix[64];
+
+    void Reset()
+    {
+        MPEG2QuantMatrixBase b = {};
+        *this = b;
+    }
+};
+
+struct MPEG2QuantMatrix : public HeapObject, public MPEG2QuantMatrixBase
+{
+
+    MPEG2QuantMatrix()
+        : MPEG2QuantMatrixBase()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        MPEG2QuantMatrixBase::Reset();
+    }
+
+    ~MPEG2QuantMatrix()
+    {
+    }
+
+    int32_t GetID() const
+    {
+        return 0;
+    }
+};
+
+struct MPEG2SliceHeader_
+{
+    uint8_t slice_vertical_position;
+    uint8_t slice_vertical_position_extension;
+    uint8_t priority_breakpoint;
+    uint8_t quantiser_scale_code;
+    uint8_t intra_slice_flag;
+    uint8_t intra_slice;
+    
+    ///////////////////////////////////////////////////////
+    // calculated params
+    ///////////////////////////////////////////////////////
+    uint32_t m_HeaderBitstreamOffset;
+    uint32_t m_MbOffset;
+    //mpeg2 elements of slice header
+    const MPEG2SequenceHeader*           m_SequenceParam;
+    const MPEG2SequenceExtension*        m_SequenceParamExt;
+    const MPEG2SequenceDisplayExtension* m_SequenceDisplayExt;
+    const MPEG2PictureHeader*            m_PictureParam;
+    const MPEG2PictureHeaderExtension*   m_PictureParamExt;
 };
 
 

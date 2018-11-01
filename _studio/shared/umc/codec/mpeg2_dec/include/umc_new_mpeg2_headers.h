@@ -188,6 +188,7 @@ public:
         , m_SequenceDisplayExt(pObjHeap)
         , m_PictureParam(pObjHeap)
         , m_PictureParamExt(pObjHeap)
+        , m_QuantMatrix(pObjHeap)
         , m_pObjHeap(pObjHeap)
     {
     }
@@ -204,6 +205,7 @@ public:
         m_SequenceDisplayExt.Reset(isPartialReset);
         m_PictureParam.Reset(isPartialReset);
         m_PictureParamExt.Reset(isPartialReset);
+        m_QuantMatrix.Reset(isPartialReset);
     }
 
     HeaderSet<MPEG2VideoParamSet>           m_VideoParams;
@@ -216,6 +218,7 @@ public:
     HeaderSet<MPEG2SequenceDisplayExtension>  m_SequenceDisplayExt;
     HeaderSet<MPEG2PictureHeader>             m_PictureParam;
     HeaderSet<MPEG2PictureHeaderExtension>    m_PictureParamExt;
+    HeaderSet<MPEG2QuantMatrix>               m_QuantMatrix;
 private:
     Heap_Objects  *m_pObjHeap;
 };

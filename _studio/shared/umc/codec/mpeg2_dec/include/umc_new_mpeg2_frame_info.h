@@ -85,15 +85,16 @@ public:
         m_hasDependentSliceSegments = m_hasDependentSliceSegments || sliceHeader.dependent_slice_segment_flag;
         m_isNeedDeblocking = m_isNeedDeblocking || (!sliceHeader.slice_deblocking_filter_disabled_flag);
         m_isNeedSAO = m_isNeedSAO || (sliceHeader.slice_sao_luma_flag || sliceHeader.slice_sao_chroma_flag);
-        m_hasTiles = pSlice->GetPicParam()->getNumTiles() > 1;
+        m_hasTiles = false;
 
         m_WA_different_disable_deblocking = m_WA_different_disable_deblocking || (sliceHeader.slice_deblocking_filter_disabled_flag != m_pSliceQueue[0]->GetSliceHeader()->slice_deblocking_filter_disabled_flag);
-
+/*
         if (!m_sps)
         {
             m_sps = (MPEG2SeqParamSet *)pSlice->GetSeqParam();
             m_sps->IncrementReference();
         }
+*/
     }
 
     uint32_t GetSliceCount() const

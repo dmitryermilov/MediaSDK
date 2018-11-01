@@ -484,6 +484,8 @@ private:
     UMC::Status xDecodePictureHeader(MPEG2HeadersBitstream *);
     // Decode sequence display extension
     UMC::Status xDecodePictureHeaderExt(MPEG2HeadersBitstream *);
+    // Decode quant matrix extension
+    UMC::Status xDecodeQuantMatrix(MPEG2HeadersBitstream *);
 
     // Decode video parameters set NAL unit
     UMC::Status xDecodeVPS(MPEG2HeadersBitstream *);
