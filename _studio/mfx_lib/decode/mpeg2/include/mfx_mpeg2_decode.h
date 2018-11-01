@@ -344,26 +344,89 @@ public:
 
 
     virtual mfxStatus GetDecodeStat(mfxDecodeStat *stat);
-    virtual mfxStatus DecodeFrameCheck(mfxBitstream *, mfxFrameSurface1 *, mfxFrameSurface1 **)
-    {
-        return MFX_ERR_NONE;
-    };
+
     virtual mfxStatus DecodeFrameCheck(mfxBitstream *bs,
                                mfxFrameSurface1 *surface_work,
                                mfxFrameSurface1 **surface_out,
                                MFX_ENTRY_POINT *pEntryPoint);
 
-    mfxStatus CheckFrameData(const mfxFrameSurface1 *pSurface);
 
     virtual mfxStatus GetUserData(mfxU8 *ud, mfxU32 *sz, mfxU64 *ts,mfxU16 bufsize);
     virtual mfxStatus GetPayload(mfxU64 *ts, mfxPayload *payload);
     virtual mfxStatus SetSkipMode(mfxSkipMode mode);
+    
+    // Decoder instance threads entry point. Do async tasks here
+    mfxStatus RunThread(void * params, mfxU32 threadNumber);
 
 protected:
     VideoCORE *m_pCore;
 
     bool m_isInitialized;
     bool m_isSWImpl;
+    
+    // Actually calculate needed frames number
+    static mfxStatus QueryIOSurfInternal(eMFXPlatform platform, eMFXHWType type, mfxVideoParam *par, mfxFrameAllocRequest *request);
+
+    // Check if new parameters are compatible with new parameters
+    bool IsSameVideoParam(mfxVideoParam * newPar, mfxVideoParam * oldPar, eMFXHWType type);
+
+    // Fill up frame parameters before returning it to application
+    void FillOutputSurface(mfxFrameSurface1 **surface_out, mfxFrameSurface1 *surface_work, MPEG2DecoderFrame * pFrame);
+    // Find a next frame ready to be output from decoder
+    MPEG2DecoderFrame * GetFrameToDisplay_MPEG2(bool force);
+
+    // Wait until a frame is ready to be output and set necessary surface flags
+    mfxStatus DecodeFrame(mfxFrameSurface1 *surface_out, MPEG2DecoderFrame * pFrame = 0);
+
+    // Check if there is enough data to start decoding in async mode
+    mfxStatus DecodeFrameCheck(mfxBitstream *bs, mfxFrameSurface1 *surface_work, mfxFrameSurface1 **surface_out);
+
+    // Fill up resolution information if new header arrived
+    void FillVideoParam(mfxVideoParamWrapper *par, bool full);
+
+    // Fill up frame allocator request data
+    mfxStatus UpdateAllocRequest(mfxVideoParam *par,
+                                mfxFrameAllocRequest *request,
+                                mfxExtOpaqueSurfaceAlloc * &pOpaqAlloc,
+                                bool &mapping);
+
+    // Get original Surface corresponding to OpaqueSurface
+    mfxFrameSurface1 * GetOriginalSurface(mfxFrameSurface1 *surface);
+
+    std::unique_ptr<MFXTaskSupplier_MPEG2>  m_pH265VideoDecoder;
+    mfx_UMC_MemAllocator            m_MemoryAllocator;
+
+    std::unique_ptr<mfx_UMC_FrameAllocator>    m_FrameAllocator;
+
+    mfxVideoParamWrapper m_vInitPar;
+    mfxVideoParamWrapper m_vFirstPar;
+    mfxVideoParamWrapper m_vPar;
+    ExtendedBuffer m_extBuffers;
+
+    VideoCORE * m_core;
+
+    bool    m_isInit;
+    bool    m_isOpaq;
+    bool    m_globalTask;
+
+    mfxU16  m_frameOrder;
+
+    mfxFrameAllocResponse m_response;
+    mfxFrameAllocResponse m_response_alien;
+    mfxDecodeStat m_stat;
+    eMFXPlatform m_platform;
+
+    UMC::Mutex m_mGuard;
+    UMC::Mutex m_mGuardRunThread;
+    bool m_useDelayedDisplay;
+
+    UMC::VideoAccelerator * m_va;
+    enum
+    {
+        NUMBER_OF_ADDITIONAL_FRAMES = 10
+    };
+
+    bool m_isFirstRun;
 
 
     enum SkipLevel

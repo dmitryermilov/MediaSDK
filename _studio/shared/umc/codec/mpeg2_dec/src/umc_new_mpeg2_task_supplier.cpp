@@ -587,6 +587,8 @@ void ViewItem_MPEG2::Reset(void)
 // Reset the size of DPB for particular view item
 void ViewItem_MPEG2::SetDPBSize(MPEG2SeqParamSet *pSps, uint32_t & level_idc)
 {
+	dpbSize = 2;
+	/*
     uint32_t level = level_idc ? level_idc : pSps->m_pcPTL.GetGeneralPTL()->level_idc;
 
     // calculate the new DPB size value
@@ -603,7 +605,7 @@ void ViewItem_MPEG2::SetDPBSize(MPEG2SeqParamSet *pSps, uint32_t & level_idc)
     {
         pSps->m_pcPTL.GetGeneralPTL()->level_idc = level;
     }
-
+*/
     // provide the new value to the DPBList
     if (pDPB.get())
     {
@@ -1108,6 +1110,17 @@ UMC::Status TaskSupplier_MPEG2::xDecodePictureHeaderExt(MPEG2HeadersBitstream *b
     return UMC::UMC_OK;
 }
 
+UMC::Status TaskSupplier_MPEG2::xDecodeQuantMatrix(MPEG2HeadersBitstream *bs)
+{
+    MPEG2QuantMatrix quantMatrix;
+
+    bs->GetQuantMatrix(&quantMatrix);
+
+    m_Headers.m_QuantMatrix.AddHeader(&quantMatrix);
+
+    return UMC::UMC_OK;
+}
+
 // Decode video parameters set NAL unit
 UMC::Status TaskSupplier_MPEG2::xDecodeVPS(MPEG2HeadersBitstream *bs)
 {
@@ -1471,7 +1484,6 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
             break;
         case NAL_UT_EXTENSION:
         {
-
             NalUnitTypeExt nal_unit_type_ext = (NalUnitTypeExt)bitStream.GetBits(4);
             switch(nal_unit_type_ext)
             {
@@ -1482,6 +1494,9 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
                 umcRes = xDecodeSequenceDisplayExt(&bitStream);
                 break;
             case NAL_UT_EXT_PICTURE_CODING_EXTENSION:
+                umcRes = xDecodePictureHeaderExt(&bitStream);
+                break;
+            case NAL_UT_EXT_QUANT_MATRIX_EXTENSION:
                 umcRes = xDecodePictureHeaderExt(&bitStream);
                 break;
             default:
@@ -1562,6 +1577,10 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFrameToDisplayInternal(bool force)
 {
     ViewItem_MPEG2 &view = *GetView();
 
+    return view.pDPB->findOldestDisplayable(view.dpbSize);
+
+#if 0
+
     if (m_decodedOrder)
     {
         return view.pDPB->findOldestDisplayable(view.dpbSize);
@@ -1601,7 +1620,7 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFrameToDisplayInternal(bool force)
     }
     break;
     }
-
+#endif
     return 0;
 }
 
@@ -1876,8 +1895,10 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
 
             NalUnitType nut =
                 static_cast<NalUnitType>(pMediaDataEx->values[i]);
+
             switch (nut)
             {
+/*
             case NAL_UT_CODED_SLICE_RASL_N:
             case NAL_UT_CODED_SLICE_RADL_N:
             case NAL_UT_CODED_SLICE_TRAIL_R:
@@ -1910,6 +1931,12 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
             case NAL_UT_VPS:
             case NAL_UT_SPS:
             case NAL_UT_PPS:
+*/
+            case NAL_UT_PICTURE_HEADER:
+                if (AddSlice(0, !pSource) == UMC::UMC_OK)
+                    return UMC::UMC_OK;
+            case NAL_UT_SEQUENCE_HEADER:
+            case NAL_UT_EXTENSION:
                 {
                     UMC::Status umsRes = DecodeHeaders(nalUnit);
                     if (umsRes != UMC::UMC_OK)
@@ -1936,7 +1963,7 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
                     }
                 }
                 break;
-
+/*
             case NAL_UT_AU_DELIMITER:
                 if (AddSlice(0, !pSource) == UMC::UMC_OK)
                     return UMC::UMC_OK;
@@ -1952,10 +1979,19 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
                 NoRaslOutputFlag = 1;
                 return UMC::UMC_OK;
                 break;
-
+*/
             default:
                 break;
             };
+            if (nut >= 0x1 && nut <= 0xAF)
+            {
+                if(MPEG2Slice *pSlice = DecodeSliceHeader(nalUnit))
+                {
+                    UMC::Status sts = AddSlice(pSlice, !pSource);
+                    if (sts == UMC::UMC_ERR_NOT_ENOUGH_BUFFER || sts == UMC::UMC_OK)
+                        return sts;
+                }
+            }
         }
 
     } while ((pSource) && (MINIMAL_DATA_SIZE_MPEG2 < pSource->GetDataSize()));
@@ -2047,14 +2083,8 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
         return 0;
     }
 
-    MPEG2SliceHeader * sliceHdr = pSlice->GetSliceHeader();
+    MPEG2SliceHeader_ * sliceHdr = pSlice->GetSliceHeader_();
     VM_ASSERT(sliceHdr);
-
-    if (m_prevSliceBroken && sliceHdr->dependent_slice_segment_flag)
-    {
-        //Prev. slice contains errors. There is no relayable way to infer parameters for dependent slice
-        return 0;
-    }
 
     uint32_t currOffset = sliceHdr->m_HeaderBitstreamOffset;
     uint32_t currOffsetWithEmul = currOffset;
@@ -2218,31 +2248,11 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
 
     if (pFrame)
     {
+    	/*
         MPEG2Slice *firstSlice = pFrame->GetAU()->GetSlice(0);
         VM_ASSERT(firstSlice);
 
-        if (pSlice->GetSliceHeader()->dependent_slice_segment_flag)
-        {
-            MPEG2Slice *pLastFrameSlice = pFrame->GetAU()->GetSlice(pFrame->GetAU()->GetSliceCount() - 1);
-            pSlice->CopyFromBaseSlice(pLastFrameSlice);
-        }
-
-        // Accord. to ITU-T H.265 7.4.2.4 Any SPS/PPS w/ id equal to active one
-        // shall have the same content, unless it follows the last VCL NAL of the coded picture
-        // and precedes the first VCL NAL unit of another coded picture
-        // if the slices belong to different AUs or SPS/PPS was changed,
-        // close the current AU and start new one.
-
-        const MPEG2SeqParamSet * sps = m_Headers.m_SeqParams.GetHeader(pSlice->GetSeqParam()->GetID());
-        const MPEG2PicParamSet * pps = m_Headers.m_PicParams.GetHeader(pSlice->GetPicParam()->GetID());
-
-        if (!sps || !pps) // undefined behavior
-            return UMC::UMC_ERR_FAILED;
-
-        bool changed =
-            sps->m_changed ||
-            pps->m_changed ||
-            !IsPictureTheSame(firstSlice, pSlice);
+        bool changed = IsPictureTheSame(firstSlice, pSlice);
 
         if (changed)
         {
@@ -2252,21 +2262,12 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
             m_pLastSlice = pSlice;
             return UMC::UMC_OK;
         }
+        */
     }
     // there is no free frames.
     // try to allocate a new frame.
     else
     {
-        MPEG2SeqParamSet * sps = m_Headers.m_SeqParams.GetHeader(pSlice->GetSeqParam()->GetID());
-        MPEG2PicParamSet * pps = m_Headers.m_PicParams.GetHeader(pSlice->GetPicParam()->GetID());
-
-        if (!sps || !pps) // undefined behavior
-            return UMC::UMC_ERR_FAILED;
-
-        // clear change flags when get first VCL NAL
-        sps->m_changed = false;
-        pps->m_changed = false;
-
         // allocate a new frame, initialize it with slice's parameters.
         pFrame = AllocateNewFrame(pSlice);
         if (!pFrame)
@@ -2292,7 +2293,7 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
         if (NumShortTermRefs + NumLongTermRefs == 0)
             AddFakeReferenceFrame(pSlice);
     }
-
+/*
     MPEG2PicParamSet const* pps = pSlice->GetPicParam();
     VM_ASSERT(pps);
 
@@ -2301,7 +2302,7 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
 
     // Set reference list
     pSlice->UpdateReferenceList(GetView()->pDPB.get(), curr_ref);
-
+*/
     return UMC::UMC_ERR_NOT_ENOUGH_DATA;
 }
 
@@ -2328,7 +2329,8 @@ void TaskSupplier_MPEG2::OnFullFrame(MPEG2DecoderFrame * pFrame)
     if (!pFrame->GetAU()->GetSlice(0)) // seems that it was skipped and slices was dropped
         return;
 
-    pFrame->SetisDisplayable(pFrame->GetAU()->GetSlice(0)->GetSliceHeader()->pic_output_flag != 0);
+    pFrame->SetisDisplayable(true);
+    //pFrame->SetisDisplayable(pFrame->GetAU()->GetSlice(0)->GetSliceHeader()->pic_output_flag != 0);
 
     if (pFrame->GetAU()->GetSlice(0)->GetSliceHeader()->IdrPicFlag && !(pFrame->GetError() & UMC::ERROR_FRAME_DPB))
     {
@@ -2354,13 +2356,13 @@ void TaskSupplier_MPEG2::CompleteFrame(MPEG2DecoderFrame * pFrame)
 
     DEBUG_PRINT((VM_STRING("Complete frame POC - (%d) type - %d, count - %d, m_uid - %d, IDR - %d\n"), pFrame->m_PicOrderCnt, pFrame->m_FrameType, slicesInfo->GetSliceCount(), pFrame->m_UID, slicesInfo->GetAnySlice()->GetSliceHeader()->IdrPicFlag));
 
-    slicesInfo->EliminateASO();
-    slicesInfo->EliminateErrors();
+    //slicesInfo->EliminateASO();
+    //slicesInfo->EliminateErrors();
     m_prevSliceBroken = false;
 
     // skipping algorithm
     const MPEG2Slice *slice = slicesInfo->GetSlice(0);
-    if (!slice || IsShouldSkipFrame(pFrame) || IsSkipForCRAorBLA(slice))
+    if (!slice || IsShouldSkipFrame(pFrame) /*|| IsSkipForCRAorBLA(slice)*/)
     {
         slicesInfo->SetStatus(MPEG2DecoderFrameInfo::STATUS_COMPLETED);
 
@@ -2380,30 +2382,29 @@ void TaskSupplier_MPEG2::CompleteFrame(MPEG2DecoderFrame * pFrame)
 UMC::Status TaskSupplier_MPEG2::InitFreeFrame(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
 {
     UMC::Status umcRes = UMC::UMC_OK;
-    const MPEG2SeqParamSet *pSeqParam = pSlice->GetSeqParam();
+    const MPEG2PictureHeader *pic         = pSlice->GetPicHeader();
+    const MPEG2SequenceHeader * seq       = pSlice->GetSeqHeader();
+    const MPEG2SequenceExtension * seqExt = pSlice->GetSeqHeaderExt();
 
-    pFrame->m_FrameType = SliceTypeToFrameType(pSlice->GetSliceHeader()->slice_type);
+    pFrame->m_FrameType = (UMC::FrameType)pic->picture_coding_type;
     pFrame->m_dFrameTime = pSlice->m_source.GetTime();
-    pFrame->m_crop_left = pSeqParam->conf_win_left_offset + pSeqParam->def_disp_win_left_offset;
-    pFrame->m_crop_right = pSeqParam->conf_win_right_offset + pSeqParam->def_disp_win_right_offset;
-    pFrame->m_crop_top = pSeqParam->conf_win_top_offset + pSeqParam->def_disp_win_top_offset;
-    pFrame->m_crop_bottom = pSeqParam->conf_win_bottom_offset + pSeqParam->def_disp_win_bottom_offset;
-    pFrame->m_crop_flag = pSeqParam->conformance_window_flag;
+    pFrame->m_crop_left = 0;
+    pFrame->m_crop_right = seq->horizontal_size_value;
+    pFrame->m_crop_top = seq->vertical_size_value;
+    pFrame->m_crop_bottom = 0;
+    pFrame->m_crop_flag = false;
 
-    pFrame->m_aspect_width  = pSeqParam->sar_width;
-    pFrame->m_aspect_height = pSeqParam->sar_height;
+    uint16_t aspectRatioW, aspectRatioH;
+    CalcAspectRatio(seq->aspect_ratio_information, seq->horizontal_size_value, seq->vertical_size_value,
+                    aspectRatioW, aspectRatioH);
+    pFrame->m_aspect_width  = aspectRatioW;
+    pFrame->m_aspect_height = aspectRatioH;
 
-    int32_t chroma_format_idc = pSeqParam->chroma_format_idc;
+    int32_t bit_depth = 8;
 
-    uint8_t bit_depth_luma, bit_depth_chroma;
-    bit_depth_luma = (uint8_t) pSeqParam->bit_depth_luma;
-    bit_depth_chroma = (uint8_t) pSeqParam->bit_depth_chroma;
+    mfxSize dimensions = {static_cast<int>(seq->horizontal_size_value), static_cast<int>(seq->vertical_size_value)};
 
-    int32_t bit_depth = MFX_MAX(bit_depth_luma, bit_depth_chroma);
-
-    mfxSize dimensions = {static_cast<int>(pSeqParam->pic_width_in_luma_samples), static_cast<int>(pSeqParam->pic_height_in_luma_samples)};
-
-    UMC::ColorFormat cf = GetUMCColorFormat_MPEG2(chroma_format_idc);
+    UMC::ColorFormat cf = GetUMCColorFormat_MPEG2(seqExt->chroma_format);
 
     if (cf == UMC::YUV420) //  msdk !!!
         cf = UMC::NV12;
@@ -2458,12 +2459,13 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
 
     ViewItem_MPEG2 &view = *GetView();
     view.SetDPBSize(const_cast<MPEG2SeqParamSet*>(pSlice->GetSeqParam()), m_level_idc);
+/*
     view.sps_max_dec_pic_buffering = pSlice->GetSeqParam()->sps_max_dec_pic_buffering[pSlice->GetSliceHeader()->nuh_temporal_id] ?
                                     pSlice->GetSeqParam()->sps_max_dec_pic_buffering[pSlice->GetSliceHeader()->nuh_temporal_id] :
                                     view.dpbSize;
 
     view.sps_max_num_reorder_pics = MFX_MIN(pSlice->GetSeqParam()->sps_max_num_reorder_pics[HighestTid], view.sps_max_dec_pic_buffering);
-
+*/
     DPBUpdate(pSlice);
 
     pFrame = GetFreeFrame();
@@ -2472,9 +2474,9 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
         return NULL;
     }
 
-    CheckCRAOrBLA(pSlice);
+    //CheckCRAOrBLA(pSlice);
 
-    pFrame->m_pic_output = pSlice->GetSliceHeader()->pic_output_flag != 0;
+    //pFrame->m_pic_output = pSlice->GetSliceHeader()->pic_output_flag != 0;
     pFrame->SetisShortTermRef(true);
 
     UMC::Status umcRes = InitFreeFrame(pFrame, pSlice);
@@ -2499,13 +2501,14 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
     {
         m_sei_messages->SetFrame(pFrame);
     }
-
+/*
     MPEG2SEIPayLoad * payload = m_Headers.m_SEIParams.GetHeader(SEI_PIC_TIMING_TYPE);
     if (payload && pSlice->GetSeqParam()->frame_field_info_present_flag)
     {
         pFrame->m_DisplayPictureStruct_MPEG2 = payload->SEI_messages.pic_timing.pic_struct;
     }
     else
+*/
     {
         pFrame->m_DisplayPictureStruct_MPEG2 = DPS_FRAME_MPEG2;
     }
@@ -2519,7 +2522,9 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
 // Initialize frame's counter and corresponding parameters
 void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
 {
-    const MPEG2SliceHeader *sliceHeader = pSlice->GetSliceHeader();
+/*
+    const MPEG2SliceHeader_ *sliceHeader = pSlice->GetSliceHeader_();
+
     ViewItem_MPEG2 &view = *GetView();
 
     if (sliceHeader->IdrPicFlag ||
@@ -2528,8 +2533,9 @@ void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG
     {
         view.pDPB->IncreaseRefPicListResetCount(pFrame);
     }
-
-    pFrame->setPicOrderCnt(sliceHeader->slice_pic_order_cnt_lsb);
+*/
+    const MPEG2PictureHeader * pic = pSlice->GetPicHeader();
+    pFrame->setPicOrderCnt(pic->temporal_reference);
 
     DEBUG_PRINT((VM_STRING("Init frame %s\n"), GetFrameInfoString(pFrame)));
 

@@ -182,6 +182,22 @@ MPEG2DecoderFrame * MPEG2DBPList::findOldestDisplayable(int32_t /*dbpSize*/ )
     MPEG2DecoderFrame *pCurr = m_pHead;
     MPEG2DecoderFrame *pOldest = NULL;
     int32_t  SmallestPicOrderCnt = 0x7fffffff;    // very large positive
+
+    while (pCurr)
+    {
+        if (pCurr->isDisplayable() && !pCurr->wasOutputted())
+        {
+            if (pCurr->PicOrderCnt() <= SmallestPicOrderCnt)
+            {
+                pOldest = pCurr;
+                SmallestPicOrderCnt = pCurr->PicOrderCnt();
+            }
+
+        }
+        pCurr = pCurr->future();
+    }
+#if 0
+    int32_t  SmallestPicOrderCnt = 0x7fffffff;    // very large positive
     int32_t  LargestRefPicListResetCount = 0;
     int32_t  uid = 0x7fffffff;
 
@@ -230,7 +246,7 @@ MPEG2DecoderFrame * MPEG2DBPList::findOldestDisplayable(int32_t /*dbpSize*/ )
 
         pCurr = pCurr->future();
     }
-
+#endif
     return pOldest;
 }    // findOldestDisplayable
 

@@ -473,6 +473,8 @@ mfxStatus FullEncode::SubmitFrame(sExtTask2 *pExtTask)
         {
             sts = m_pENCODE->SubmitFrame(pIntTask, m_UDBuff.GetUserDataBuffer(), m_UDBuff.GetUserDataSize(), qp);
         }
+        if (sts == MFX_TASK_BUSY)
+            printf("MFX_TASK_BUSY\n");
 
         MFX_CHECK_STS(sts);
 

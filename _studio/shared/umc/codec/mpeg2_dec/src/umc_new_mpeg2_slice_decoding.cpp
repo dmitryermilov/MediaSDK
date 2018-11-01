@@ -118,10 +118,14 @@ bool MPEG2Slice::Reset(PocDecoding * pocDecoding)
     if (m_source.GetDataSize() && false == DecodeSliceHeader())
         return false;
 
-    m_SliceHeader.m_HeaderBitstreamOffset = (uint32_t)m_BitStream.BytesDecoded();
+    m_SliceHeader_.m_HeaderBitstreamOffset = (uint32_t)m_BitStream.BytesDecoded();
+    m_SliceHeader_.m_MbOffset = (uint32_t)m_BitStream.BitsDecoded();
 
-    m_SliceHeader.m_SeqParamSet = m_pSeqParamSet;
-    m_SliceHeader.m_PicParamSet = m_pPicParamSet;
+    m_SliceHeader_.m_SequenceParam      = m_pSequenceParam;
+    m_SliceHeader_.m_SequenceParamExt   = m_pSequenceParamExt;
+    //m_SliceHeader_.m_SequenceDisplayExt =
+    m_SliceHeader_.m_PictureParam       = m_pPictureParam;
+    m_SliceHeader_.m_PictureParamExt    = m_pPictureParamExt;
 
     //int32_t iMBInFrame = (GetSeqParam()->WidthInCU * GetSeqParam()->HeightInCU);
 

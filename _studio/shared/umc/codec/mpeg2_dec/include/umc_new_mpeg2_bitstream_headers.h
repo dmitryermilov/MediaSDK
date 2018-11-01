@@ -103,6 +103,12 @@
     } \
 }
 
+// Check 1 bit from 32-bit array
+#define CheckBit1(current_data, offset, data) \
+{ \
+    data = ((current_data[0] >> (offset)) & 1);  \
+}
+
 // Align bitstream position to byte boundary
 #define ippiAlignBSPointerRight(current_data, offset) \
 { \
@@ -222,6 +228,9 @@ public:
 
     // Reads one bit from the buffer.
     uint8_t Get1Bit();
+    
+    // Check next bit in the buffer.
+    uint8_t Check1Bit();
 
     // Check that position in bitstream didn't move outside the limit
     bool CheckBSLeft();
@@ -332,6 +341,9 @@ public:
 
     // Parse picture extension
     void GetPictureExtensionHeader(MPEG2PictureHeaderExtension *picExt);
+    
+    // Parse quant matrix extension
+    void GetQuantMatrix(MPEG2QuantMatrix *q);
 /*********************************MPEG2******************************************/
     // Part VPS header
     UMC::Status GetVideoParamSet(MPEG2VideoParamSet *vps);
@@ -505,6 +517,16 @@ inline uint8_t MPEG2BaseBitstream::Get1Bit()
     uint32_t w;
 
     GetBits1(m_pbs, m_bitOffset, w);
+    return (uint8_t)w;
+
+} // MPEG2Bitstream::Get1Bit()
+
+// Read one bit
+inline uint8_t MPEG2BaseBitstream::Check1Bit()
+{
+    uint32_t w;
+
+    CheckBit1(m_pbs, m_bitOffset, w);
     return (uint8_t)w;
 
 } // MPEG2Bitstream::Get1Bit()
