@@ -972,10 +972,9 @@ bool CheckVideoParam_MPEG2(mfxVideoParam *in, eMFXHWType /* type */)
     if ((in->mfx.FrameInfo.AspectRatioW || in->mfx.FrameInfo.AspectRatioH) && !(in->mfx.FrameInfo.AspectRatioW && in->mfx.FrameInfo.AspectRatioH))
         return false;
 
-    if (in->mfx.CodecProfile != MFX_PROFILE_MPEG2_MAIN /*&&
-        in->mfx.CodecProfile != MFX_PROFILE_MPEG2_MAIN10 &&
-        in->mfx.CodecProfile != MFX_PROFILE_MPEG2_MAINSP &&
-        in->mfx.CodecProfile != MFX_PROFILE_MPEG2_REXT*/
+    if (in->mfx.CodecProfile != MFX_PROFILE_MPEG2_SIMPLE &&
+        in->mfx.CodecProfile != MFX_PROFILE_MPEG2_MAIN &&
+        in->mfx.CodecProfile != MFX_PROFILE_MPEG2_HIGH
         )
         return false;
 
