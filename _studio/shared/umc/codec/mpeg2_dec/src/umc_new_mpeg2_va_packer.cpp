@@ -113,7 +113,7 @@ void PackerVA::PackPicParams(const MPEG2DecoderFrame *pCurrentFrame, MPEG2Decode
     const MPEG2SliceHeader_* sliceHeader      = pSlice->GetSliceHeader_();
     const MPEG2SequenceHeader* seq            = pSlice->GetSeqHeader();
     const MPEG2PictureHeader*  pic            = pSlice->GetPicHeader();
-    const MPEG2PictureHeaderExtension* picExt = pSlice->GetPicHeaderExt();
+    const MPEG2PictureCodingExtension* picExt = pic->GetPicExt();
 
     UMCVACompBuffer *picParamBuf;
     VAPictureParameterBufferMPEG2* picParam = (VAPictureParameterBufferMPEG2*)m_va->GetCompBuffer(VAPictureParameterBufferType, &picParamBuf, sizeof(VAPictureParameterBufferMPEG2));
@@ -128,10 +128,10 @@ void PackerVA::PackPicParams(const MPEG2DecoderFrame *pCurrentFrame, MPEG2Decode
     picParam->forward_reference_picture  = VA_INVALID_SURFACE;
     picParam->backward_reference_picture = VA_INVALID_SURFACE;
     picParam->picture_coding_type = pic->picture_coding_type;
-	for(uint8_t i = 0; i < 4; ++i)
-	{
-		picParam->f_code |= (picExt->f_code[i] << (12 - 4*i));
-	}
+    for(uint8_t i = 0; i < 4; ++i)
+    {
+        picParam->f_code |= (picExt->f_code[i] << (12 - 4*i));
+    }
 
     picParam->picture_coding_extension.bits.intra_dc_precision         = picExt->intra_dc_precision;
     picParam->picture_coding_extension.bits.picture_structure          = picExt->picture_structure;
@@ -140,9 +140,9 @@ void PackerVA::PackPicParams(const MPEG2DecoderFrame *pCurrentFrame, MPEG2Decode
     picParam->picture_coding_extension.bits.concealment_motion_vectors = picExt->concealment_motion_vectors;
     picParam->picture_coding_extension.bits.q_scale_type               = picExt->q_scale_type;
     picParam->picture_coding_extension.bits.intra_vlc_format           = picExt->intra_vlc_format;
-    picParam->picture_coding_extension.bits.alternate_scan	           = picExt->alternate_scan;
-    picParam->picture_coding_extension.bits.repeat_first_field	       = picExt->repeat_first_field;
-    picParam->picture_coding_extension.bits.progressive_frame	       = picExt->progressive_frame;
+    picParam->picture_coding_extension.bits.alternate_scan               = picExt->alternate_scan;
+    picParam->picture_coding_extension.bits.repeat_first_field           = picExt->repeat_first_field;
+    picParam->picture_coding_extension.bits.progressive_frame           = picExt->progressive_frame;
     picParam->picture_coding_extension.bits.is_first_field             = 1; //for now
 }
 
@@ -259,8 +259,8 @@ void PackerVA::PackQmatrix(const MPEG2Slice *pSlice)
         throw mpeg2_exception(UMC_ERR_FAILED);
     quantBuf->SetDataSize(sizeof(VAIQMatrixBufferMPEG2));
 
-    const MPEG2SliceHeader_* sliceHeader      = pSlice->GetSliceHeader_();
-    const MPEG2SequenceHeader* seq            = pSlice->GetSeqHeader();
+    const MPEG2SliceHeader_* sliceHeader = pSlice->GetSliceHeader_();
+    const MPEG2SequenceHeader* seq       = pSlice->GetSeqHeader();
 
     qmatrix->load_intra_quantiser_matrix              = 1;
     qmatrix->load_non_intra_quantiser_matrix          = 1;
@@ -269,34 +269,34 @@ void PackerVA::PackQmatrix(const MPEG2Slice *pSlice)
 
     if (seq->load_intra_quantiser_matrix)
     {
-    	for (uint8_t i=0; i < 64; ++i)
+        for (uint8_t i=0; i < 64; ++i)
         {
-    		qmatrix->intra_quantiser_matrix[i] = seq->intra_quantiser_matrix[i];
-    		qmatrix->chroma_intra_quantiser_matrix[i] = seq->intra_quantiser_matrix[i];
+            qmatrix->intra_quantiser_matrix[i] = seq->intra_quantiser_matrix[i];
+            qmatrix->chroma_intra_quantiser_matrix[i] = seq->intra_quantiser_matrix[i];
         }
     }
     else
     {
-    	for (uint8_t i=0; i < 64; ++i)
+        for (uint8_t i=0; i < 64; ++i)
         {
-    		qmatrix->intra_quantiser_matrix[i] = default_intra_quantizer_matrix[i];
-    		qmatrix->chroma_intra_quantiser_matrix[i] = default_intra_quantizer_matrix[i];
+            qmatrix->intra_quantiser_matrix[i] = default_intra_quantizer_matrix[i];
+            qmatrix->chroma_intra_quantiser_matrix[i] = default_intra_quantizer_matrix[i];
         }
     }
     if (seq->load_non_intra_quantiser_matrix)
     {
-    	for (uint8_t i=0; i < 64; ++i)
+        for (uint8_t i=0; i < 64; ++i)
         {
-    		qmatrix->non_intra_quantiser_matrix[i] = seq->non_intra_quantiser_matrix[i];
-    		qmatrix->chroma_non_intra_quantiser_matrix[i] = seq->non_intra_quantiser_matrix[i];
+            qmatrix->non_intra_quantiser_matrix[i] = seq->non_intra_quantiser_matrix[i];
+            qmatrix->chroma_non_intra_quantiser_matrix[i] = seq->non_intra_quantiser_matrix[i];
         }
     }
     else
     {
-    	for (uint8_t i=0; i < 64; ++i)
+        for (uint8_t i=0; i < 64; ++i)
         {
-    		qmatrix->non_intra_quantiser_matrix[i]        = 16;
-    		qmatrix->chroma_non_intra_quantiser_matrix[i] = 16;
+            qmatrix->non_intra_quantiser_matrix[i]        = 16;
+            qmatrix->chroma_non_intra_quantiser_matrix[i] = 16;
         }
     }
 }

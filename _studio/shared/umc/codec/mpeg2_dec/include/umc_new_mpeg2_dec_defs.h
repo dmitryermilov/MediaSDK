@@ -1373,7 +1373,44 @@ public:
 
 /*********************MPEG2*********************/
 
-// Sequence header
+struct MPEG2SequenceExtension
+{
+    uint8_t   profile_and_level_indication;
+    uint8_t   progressive_sequence;
+    uint8_t   chroma_format;
+    uint8_t   frame_rate_code;
+    uint8_t   horizontal_size_extension;
+    uint8_t   vertical_size_extension;
+    uint32_t  bit_rate_extension;
+    uint32_t  vbv_buffer_size_extension;
+    uint8_t   low_delay;
+    uint8_t   frame_rate_extension_n;
+    uint8_t   frame_rate_extension_d;
+
+    void Reset()
+    {
+        MPEG2SequenceExtension b = {};
+        *this = b;
+    }
+};
+
+struct MPEG2SequenceDisplayExtension
+{
+    uint8_t   video_format;
+    uint8_t   colour_description;
+    uint8_t   colour_primaries;
+    uint8_t   transfer_characteristics;
+    uint8_t   matrix_coefficients;
+    uint16_t  display_horizontal_size;
+    uint16_t  display_vertical_size;
+
+    void Reset()
+    {
+        MPEG2SequenceDisplayExtension b = {};
+        *this = b;
+    }
+};
+
 struct MPEG2SequenceHeaderBase
 {
     uint32_t  horizontal_size_value;
@@ -1393,6 +1430,21 @@ struct MPEG2SequenceHeaderBase
         MPEG2SequenceHeaderBase b = {};
         *this = b;
     }
+
+    void SetSeqExt(const MPEG2SequenceExtension & src) { seqExt = src; isSeqExtSet = true; }
+    const MPEG2SequenceExtension * GetSeqExt() const { return isSeqExtSet ? &seqExt : nullptr; }
+    MPEG2SequenceExtension * GetSeqExt() { return isSeqExtSet ? &seqExt : nullptr; }
+
+    void SetSeqDisplay(const MPEG2SequenceDisplayExtension & src) { seqDisplay = src; IsSeqDisplaySet = true; }
+    const MPEG2SequenceDisplayExtension * GetSeqDisplay() const { return IsSeqDisplaySet ? &seqDisplay : nullptr; }
+    MPEG2SequenceDisplayExtension * GetSeqDisplay() { return IsSeqDisplaySet ? &seqDisplay : nullptr; }
+protected:
+
+    bool isSeqExtSet;
+    MPEG2SequenceExtension seqExt;
+
+    bool IsSeqDisplaySet;
+    MPEG2SequenceDisplayExtension seqDisplay;
 };
 
 struct MPEG2SequenceHeader : public HeapObject, public MPEG2SequenceHeaderBase
@@ -1419,136 +1471,7 @@ struct MPEG2SequenceHeader : public HeapObject, public MPEG2SequenceHeaderBase
     }
 };
 
-// Sequence extension
-struct MPEG2SequenceExtensionBase
-{
-    uint8_t   profile_and_level_indication;
-    uint8_t   progressive_sequence;
-    uint8_t   chroma_format;
-    uint8_t   frame_rate_code;
-    uint8_t   horizontal_size_extension;
-    uint8_t   vertical_size_extension;
-    uint32_t  bit_rate_extension;
-    uint32_t  vbv_buffer_size_extension;
-    uint8_t   low_delay;
-    uint8_t   frame_rate_extension_n;
-    uint8_t   frame_rate_extension_d;
-
-    void Reset()
-    {
-        MPEG2SequenceExtensionBase b = {};
-        *this = b;
-    }
-};
-
-struct MPEG2SequenceExtension : public HeapObject, public MPEG2SequenceExtensionBase
-{
-
-    MPEG2SequenceExtension()
-        : MPEG2SequenceExtensionBase()
-    {
-        Reset();
-    }
-
-    void Reset()
-    {
-        MPEG2SequenceExtensionBase::Reset();
-    }
-
-    ~MPEG2SequenceExtension()
-    {
-    }
-
-    int32_t GetID() const
-    {
-        return 0;
-    }
-};
-
-// Sequence display extension
-struct MPEG2SequenceDisplayExtensionBase
-{
-    uint8_t   video_format;
-    uint8_t   colour_description;
-    uint8_t   colour_primaries;
-    uint8_t   transfer_characteristics;
-    uint8_t   matrix_coefficients;
-    uint16_t  display_horizontal_size;
-    uint16_t  display_vertical_size;
-
-    void Reset()
-    {
-        MPEG2SequenceDisplayExtensionBase b = {};
-        *this = b;
-    }
-};
-
-struct MPEG2SequenceDisplayExtension : public HeapObject, public MPEG2SequenceDisplayExtensionBase
-{
-
-    MPEG2SequenceDisplayExtension()
-        : MPEG2SequenceDisplayExtensionBase()
-    {
-        Reset();
-    }
-
-    void Reset()
-    {
-        MPEG2SequenceDisplayExtensionBase::Reset();
-    }
-
-    ~MPEG2SequenceDisplayExtension()
-    {
-    }
-
-    int32_t GetID() const
-    {
-        return 0;
-    }
-};
-
-struct MPEG2PictureHeaderBase
-{
-    uint16_t temporal_reference;
-    uint8_t  picture_coding_type;
-    uint16_t vbv_delay;
-    uint8_t  full_pel_forward_vector;
-    uint8_t  forward_f_code;
-    uint8_t  full_pel_backward_vector;
-    uint8_t  backward_f_code;
-
-    void Reset()
-    {
-        MPEG2PictureHeaderBase b = {};
-        *this = b;
-    }
-};
-
-struct MPEG2PictureHeader : public HeapObject, public MPEG2PictureHeaderBase
-{
-
-    MPEG2PictureHeader()
-        : MPEG2PictureHeaderBase()
-    {
-        Reset();
-    }
-
-    void Reset()
-    {
-        MPEG2PictureHeaderBase::Reset();
-    }
-
-    ~MPEG2PictureHeader()
-    {
-    }
-
-    int32_t GetID() const
-    {
-        return 0;
-    }
-};
-
-struct MPEG2PictureExtensionBase
+struct MPEG2PictureCodingExtension
 {
     uint8_t f_code[4];
     uint8_t intra_dc_precision;
@@ -1571,36 +1494,12 @@ struct MPEG2PictureExtensionBase
 
     void Reset()
     {
-        MPEG2PictureExtensionBase b = {};
+        MPEG2PictureCodingExtension b = {};
         *this = b;
     }
 };
 
-struct MPEG2PictureHeaderExtension : public HeapObject, public MPEG2PictureExtensionBase
-{
-
-    MPEG2PictureHeaderExtension()
-        : MPEG2PictureExtensionBase()
-    {
-        Reset();
-    }
-
-    void Reset()
-    {
-        MPEG2PictureExtensionBase::Reset();
-    }
-
-    ~MPEG2PictureHeaderExtension()
-    {
-    }
-
-    int32_t GetID() const
-    {
-        return 0;
-    }
-};
-
-struct MPEG2QuantMatrixBase
+struct MPEG2QuantMatrix
 {
     uint8_t load_intra_quantiser_matrix;
     uint8_t intra_quantiser_matrix[64];
@@ -1613,32 +1512,59 @@ struct MPEG2QuantMatrixBase
 
     void Reset()
     {
-        MPEG2QuantMatrixBase b = {};
+        MPEG2QuantMatrix b = {};
         *this = b;
     }
 };
 
-struct MPEG2QuantMatrix : public HeapObject, public MPEG2QuantMatrixBase
+struct MPEG2PictureHeaderBase
+{
+    uint16_t    temporal_reference;
+    uint8_t     picture_coding_type;
+    uint16_t    vbv_delay;
+    uint8_t     full_pel_forward_vector;
+    uint8_t     forward_f_code;
+    uint8_t     full_pel_backward_vector;
+    uint8_t     backward_f_code;
+
+    void Reset()
+    {
+        MPEG2PictureHeaderBase b = {};
+        *this = b;
+    }
+
+    void SetPicExt(const MPEG2PictureCodingExtension & src) { picCodingExt = src; isPicExtSet = true; }
+    const MPEG2PictureCodingExtension * GetPicExt() const { return isPicExtSet ? &picCodingExt : nullptr; }
+    MPEG2PictureCodingExtension * GetPicExt() { return isPicExtSet ? &picCodingExt : nullptr; }
+
+    void SetQuantMatrix(const MPEG2QuantMatrix & src) { quantMatrix = src; IsQuantMatrixSet = true; }
+    const MPEG2QuantMatrix * GetQuantMatrix() const { return IsQuantMatrixSet ? &quantMatrix : nullptr; }
+    MPEG2QuantMatrix * GetQuantMatrix() { return IsQuantMatrixSet ? &quantMatrix : nullptr; }
+protected:
+
+    bool isPicExtSet;
+    MPEG2PictureCodingExtension picCodingExt;
+
+    bool IsQuantMatrixSet;
+    MPEG2QuantMatrix quantMatrix;
+};
+
+struct MPEG2PictureHeader : public HeapObject, public MPEG2PictureHeaderBase
 {
 
-    MPEG2QuantMatrix()
-        : MPEG2QuantMatrixBase()
+    MPEG2PictureHeader()
+        : MPEG2PictureHeaderBase()
     {
         Reset();
     }
 
     void Reset()
     {
-        MPEG2QuantMatrixBase::Reset();
+        MPEG2PictureHeaderBase::Reset();
     }
 
-    ~MPEG2QuantMatrix()
+    ~MPEG2PictureHeader()
     {
-    }
-
-    int32_t GetID() const
-    {
-        return 0;
     }
 };
 
@@ -1650,7 +1576,7 @@ struct MPEG2SliceHeader_
     uint8_t quantiser_scale_code;
     uint8_t intra_slice_flag;
     uint8_t intra_slice;
-    
+
     ///////////////////////////////////////////////////////
     // calculated params
     ///////////////////////////////////////////////////////
@@ -1661,7 +1587,6 @@ struct MPEG2SliceHeader_
     const MPEG2SequenceExtension*        m_SequenceParamExt;
     const MPEG2SequenceDisplayExtension* m_SequenceDisplayExt;
     const MPEG2PictureHeader*            m_PictureParam;
-    const MPEG2PictureHeaderExtension*   m_PictureParamExt;
 };
 
 

@@ -120,6 +120,7 @@ public:
         if (m_pSeqParamSet)
             m_pSeqParamSet->IncrementReference();
     }
+
     //
     const MPEG2SequenceHeader *GetSeqHeader(void) const {return m_pSequenceParam;}
     void SetSeqHeader(const MPEG2SequenceHeader * seq)
@@ -128,29 +129,12 @@ public:
         if (m_pSequenceParam)
             m_pSequenceParam->IncrementReference();
     }
-    //
-    const MPEG2SequenceExtension *GetSeqHeaderExt(void) const {return m_pSequenceParamExt;}
-    void SetSeqHeaderExt(const MPEG2SequenceExtension * seqExt)
-    {
-        m_pSequenceParamExt = seqExt;
-        if (m_pSequenceParamExt)
-            m_pSequenceParamExt->IncrementReference();
-    }
-    //
     const MPEG2PictureHeader *GetPicHeader(void) const {return m_pPictureParam;}
     void SetPicHeader(const MPEG2PictureHeader * pic)
     {
         m_pPictureParam = pic;
         if (m_pPictureParam)
             m_pPictureParam->IncrementReference();
-    }
-    //
-    const MPEG2PictureHeaderExtension *GetPicHeaderExt(void) const {return m_pPictureParamExt;}
-    void SetPicHeaderExt(const MPEG2PictureHeaderExtension * picExt)
-    {
-        m_pPictureParamExt = picExt;
-        if (m_pPictureParamExt)
-            m_pPictureParamExt->IncrementReference();
     }
 
     // Obtain current destination frame
@@ -199,7 +183,6 @@ protected:
     const MPEG2SequenceHeader*         m_pSequenceParam;
     const MPEG2SequenceExtension*      m_pSequenceParamExt;
     const MPEG2PictureHeader*          m_pPictureParam;
-    const MPEG2PictureHeaderExtension* m_pPictureParamExt;
 public:
     MPEG2DecoderFrame *m_pCurrentFrame;        // (MPEG2DecoderFrame *) pointer to destination frame
 
