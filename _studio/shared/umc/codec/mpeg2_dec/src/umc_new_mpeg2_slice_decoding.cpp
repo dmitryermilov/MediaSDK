@@ -125,7 +125,6 @@ bool MPEG2Slice::Reset(PocDecoding * pocDecoding)
     m_SliceHeader_.m_SequenceParamExt   = m_pSequenceParamExt;
     //m_SliceHeader_.m_SequenceDisplayExt =
     m_SliceHeader_.m_PictureParam       = m_pPictureParam;
-    m_SliceHeader_.m_PictureParamExt    = m_pPictureParamExt;
 
     //int32_t iMBInFrame = (GetSeqParam()->WidthInCU * GetSeqParam()->HeightInCU);
 
@@ -172,7 +171,7 @@ bool MPEG2Slice::DecodeSliceHeader()
         if (nal_unit_type < 0x1 || nal_unit_type > 0xAF)
             return false;
 */
-        umcRes = m_BitStream.GetSliceHeaderFull(this, m_pSequenceParam, m_pSequenceParamExt);
+        umcRes = m_BitStream.GetSliceHeaderFull(this, m_pSequenceParam, m_pSequenceParam->GetSeqExt());
 
     }
     catch(...)

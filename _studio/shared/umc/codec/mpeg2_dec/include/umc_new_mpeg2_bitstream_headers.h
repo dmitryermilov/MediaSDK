@@ -228,7 +228,7 @@ public:
 
     // Reads one bit from the buffer.
     uint8_t Get1Bit();
-    
+
     // Check next bit in the buffer.
     uint8_t Check1Bit();
 
@@ -340,8 +340,8 @@ public:
     void GetPictureHeader(MPEG2PictureHeader *pic);
 
     // Parse picture extension
-    void GetPictureExtensionHeader(MPEG2PictureHeaderExtension *picExt);
-    
+    void GetPictureExtensionHeader(MPEG2PictureCodingExtension *picExt);
+
     // Parse quant matrix extension
     void GetQuantMatrix(MPEG2QuantMatrix *q);
 /*********************************MPEG2******************************************/

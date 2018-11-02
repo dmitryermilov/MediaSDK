@@ -372,7 +372,7 @@ void MPEG2HeadersBitstream::GetPictureHeader(MPEG2PictureHeader *pic)
     */
 }
 
-void MPEG2HeadersBitstream::GetPictureExtensionHeader(MPEG2PictureHeaderExtension *picExt)
+void MPEG2HeadersBitstream::GetPictureExtensionHeader(MPEG2PictureCodingExtension *picExt)
 {
     picExt->f_code[0] = GetBits(4); // forward horizontal
     picExt->f_code[1] = GetBits(4); // forward vertical
@@ -403,9 +403,9 @@ void MPEG2HeadersBitstream::GetPictureExtensionHeader(MPEG2PictureHeaderExtensio
 void MPEG2HeadersBitstream::GetQuantMatrix(MPEG2QuantMatrix *q)
 {
     q->load_intra_quantiser_matrix = GetBits(1);
-    if (q->load_intra_quantiser_matrix) 
+    if (q->load_intra_quantiser_matrix)
     {
-        for (uint8_t i= 0; i < 64; ++i) 
+        for (uint8_t i= 0; i < 64; ++i)
         {
             q->intra_quantiser_matrix[i] = GetBits(8);
         }
@@ -413,7 +413,7 @@ void MPEG2HeadersBitstream::GetQuantMatrix(MPEG2QuantMatrix *q)
     q->load_non_intra_quantiser_matrix = GetBits(1);
     if (q->load_non_intra_quantiser_matrix)
     {
-        for (uint8_t i= 0; i < 64; ++i) 
+        for (uint8_t i= 0; i < 64; ++i)
         {
             q->non_intra_quantiser_matrix[i] = GetBits(8);
         }
@@ -421,7 +421,7 @@ void MPEG2HeadersBitstream::GetQuantMatrix(MPEG2QuantMatrix *q)
     q->load_chroma_intra_quantiser_matrix = GetBits(1);
     if (q->load_chroma_intra_quantiser_matrix)
     {
-        for (uint8_t i= 0; i < 64; ++i) 
+        for (uint8_t i= 0; i < 64; ++i)
         {
             q->chroma_intra_quantiser_matrix[i] = GetBits(8);
         }
@@ -429,7 +429,7 @@ void MPEG2HeadersBitstream::GetQuantMatrix(MPEG2QuantMatrix *q)
     q->load_chroma_non_intra_quantiser_matrix = GetBits(1);
     if (q->load_chroma_non_intra_quantiser_matrix)
     {
-        for (uint8_t i= 0; i < 64; ++i) 
+        for (uint8_t i= 0; i < 64; ++i)
         {
             q->chroma_non_intra_quantiser_matrix[i] = GetBits(8);
         }

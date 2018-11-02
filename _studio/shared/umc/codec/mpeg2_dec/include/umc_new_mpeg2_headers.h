@@ -171,6 +171,80 @@ private:
     int32_t                    m_currentID;
 };
 
+template <typename T>
+class HeaderSetSimple
+{
+public:
+
+    HeaderSetSimple(Heap_Objects  *pObjHeap)
+        : m_Header()
+         ,m_pObjHeap(pObjHeap)
+    {
+    }
+
+    virtual ~HeaderSetSimple()
+    {
+        Reset(false);
+    }
+
+    T * AddHeader(T* hdr)
+    {
+        if (m_Header)
+        {
+            m_Header->DecrementReference();
+        }
+
+        T * header = m_pObjHeap->AllocateObject<T>();
+        *header = *hdr;
+
+        //ref. counter may not be 0 here since it can be copied from given [hdr] object
+        header->ResetRefCounter();
+        header->IncrementReference();
+
+        m_Header = header;
+        return header;
+    }
+
+    void RemoveHeader()
+    {
+        if (!m_Header)
+        {
+            VM_ASSERT(false);
+            return;
+        }
+
+        m_Header->DecrementReference();
+        m_Header = nullptr;
+    }
+
+    T * GetHeader()
+    {
+        return m_Header;
+    }
+
+    const T * GetHeader() const
+    {
+        return m_Header;
+    }
+
+    void Reset(bool isPartialReset = false)
+    {
+        if (!isPartialReset)
+        {
+            if (m_Header)
+            {
+                m_pObjHeap->FreeObject(m_Header);
+            }
+
+            m_Header = nullptr;
+        }
+    }
+
+private:
+    T*            m_Header;
+    Heap_Objects* m_pObjHeap;
+};
+
 /****************************************************************************************************/
 // Headers stuff
 /****************************************************************************************************/
@@ -184,11 +258,7 @@ public:
         , m_PicParams(pObjHeap)
         , m_SEIParams(pObjHeap)
         , m_SequenceParam(pObjHeap)
-        , m_SequenceParamExt(pObjHeap)
-        , m_SequenceDisplayExt(pObjHeap)
-        , m_PictureParam(pObjHeap)
-        , m_PictureParamExt(pObjHeap)
-        , m_QuantMatrix(pObjHeap)
+        , m_PictureHeader(pObjHeap)
         , m_pObjHeap(pObjHeap)
     {
     }
@@ -201,11 +271,7 @@ public:
         m_VideoParams.Reset(isPartialReset);
 
         m_SequenceParam.Reset(isPartialReset);
-        m_SequenceParamExt.Reset(isPartialReset);
-        m_SequenceDisplayExt.Reset(isPartialReset);
-        m_PictureParam.Reset(isPartialReset);
-        m_PictureParamExt.Reset(isPartialReset);
-        m_QuantMatrix.Reset(isPartialReset);
+        m_PictureHeader.Reset(isPartialReset);
     }
 
     HeaderSet<MPEG2VideoParamSet>           m_VideoParams;
@@ -213,12 +279,8 @@ public:
     HeaderSet<MPEG2PicParamSet>             m_PicParams;
     HeaderSet<MPEG2SEIPayLoad>              m_SEIParams;
 
-    HeaderSet<MPEG2SequenceHeader>            m_SequenceParam;
-    HeaderSet<MPEG2SequenceExtension>         m_SequenceParamExt;
-    HeaderSet<MPEG2SequenceDisplayExtension>  m_SequenceDisplayExt;
-    HeaderSet<MPEG2PictureHeader>             m_PictureParam;
-    HeaderSet<MPEG2PictureHeaderExtension>    m_PictureParamExt;
-    HeaderSet<MPEG2QuantMatrix>               m_QuantMatrix;
+    HeaderSetSimple<MPEG2SequenceHeader>      m_SequenceParam;
+    HeaderSetSimple<MPEG2PictureHeader>       m_PictureHeader;
 private:
     Heap_Objects  *m_pObjHeap;
 };

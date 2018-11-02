@@ -428,7 +428,7 @@ UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *b
 
         if (!first_seq && m_isSeqFound)
         {
-            first_seq = m_supplier->GetHeaders()->m_SequenceParam.GetCurrentHeader();
+            first_seq = m_supplier->GetHeaders()->m_SequenceParam.GetHeader();
             VM_ASSERT(first_seq && "Current sequence header should be valid when [m_isSeqFound]");
 
             MFX_CHECK_NULL_PTR1(first_seq);
@@ -460,7 +460,7 @@ UMC::Status HeadersAnalyzer::DecodeHeader(UMC::MediaData * data, mfxBitstream *b
 
     if (IsEnough())
     {
-        MPEG2SequenceHeader* last_seq = m_supplier->GetHeaders()->m_SequenceParam.GetCurrentHeader();
+        MPEG2SequenceHeader* last_seq = m_supplier->GetHeaders()->m_SequenceParam.GetHeader();
         if (first_seq && first_seq != last_seq)
             m_supplier->GetHeaders()->m_SequenceParam.AddHeader(first_seq);
 

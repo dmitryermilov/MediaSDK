@@ -900,13 +900,13 @@ void TaskSupplier_MPEG2::AfterErrorRestore()
 // Fill up current bitstream information
 UMC::Status TaskSupplier_MPEG2::GetInfo(UMC::VideoDecoderParams *lpInfo)
 {
-    MPEG2SequenceHeader *seq = m_Headers.m_SequenceParam.GetCurrentHeader();
+    MPEG2SequenceHeader *seq = m_Headers.m_SequenceParam.GetHeader();
     if (!seq)
     {
         return UMC::UMC_ERR_NOT_ENOUGH_DATA;
     }
 
-    MPEG2SequenceExtension *seqExt = m_Headers.m_SequenceParamExt.GetCurrentHeader();
+    MPEG2SequenceExtension *seqExt = seq->GetSeqExt();
     if (!seqExt)
     {
         return UMC::UMC_ERR_NOT_ENOUGH_DATA;
@@ -1072,7 +1072,11 @@ UMC::Status TaskSupplier_MPEG2::xDecodeSequenceExt(MPEG2HeadersBitstream *bs)
     MPEG2SequenceExtension seqExt;
 
     bs->GetSequenceExtension(&seqExt);
-    m_Headers.m_SequenceParamExt.AddHeader(&seqExt);
+    MPEG2SequenceHeader * seq = m_Headers.m_SequenceParam.GetHeader();
+    if (seq)
+    {
+        seq->SetSeqExt(seqExt);
+    }
 
     return UMC::UMC_OK;
 }
@@ -1082,7 +1086,11 @@ UMC::Status TaskSupplier_MPEG2::xDecodeSequenceDisplayExt(MPEG2HeadersBitstream 
     MPEG2SequenceDisplayExtension dispExt;
 
     bs->GetSequenceDisplayExtension(&dispExt);
-    m_Headers.m_SequenceDisplayExt.AddHeader(&dispExt);
+    MPEG2SequenceHeader * seq = m_Headers.m_SequenceParam.GetHeader();
+    if (seq)
+    {
+        seq->SetSeqDisplay(dispExt);
+    }
 
     return UMC::UMC_OK;
 }
@@ -1094,18 +1102,22 @@ UMC::Status TaskSupplier_MPEG2::xDecodePictureHeader(MPEG2HeadersBitstream *bs)
 
     bs->GetPictureHeader(&pic);
 
-    m_Headers.m_PictureParam.AddHeader(&pic);
+    m_Headers.m_PictureHeader.AddHeader(&pic);
 
     return UMC::UMC_OK;
 }
 
 UMC::Status TaskSupplier_MPEG2::xDecodePictureHeaderExt(MPEG2HeadersBitstream *bs)
 {
-    MPEG2PictureHeaderExtension picExt;
+    MPEG2PictureCodingExtension picExt;
 
     bs->GetPictureExtensionHeader(&picExt);
 
-    m_Headers.m_PictureParamExt.AddHeader(&picExt);
+    MPEG2PictureHeader * pic = m_Headers.m_PictureHeader.GetHeader();
+    if (pic)
+    {
+        pic->SetPicExt(picExt);
+    }
 
     return UMC::UMC_OK;
 }
@@ -1116,7 +1128,11 @@ UMC::Status TaskSupplier_MPEG2::xDecodeQuantMatrix(MPEG2HeadersBitstream *bs)
 
     bs->GetQuantMatrix(&quantMatrix);
 
-    m_Headers.m_QuantMatrix.AddHeader(&quantMatrix);
+    MPEG2PictureHeader * pic = m_Headers.m_PictureHeader.GetHeader();
+    if (pic)
+    {
+        pic->SetQuantMatrix(quantMatrix);
+    }
 
     return UMC::UMC_OK;
 }
@@ -2025,8 +2041,8 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
 {
     MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_HOTSPOTS, "TaskSupplier_MPEG2::DecodeSliceHeader");
 
-    if ((0 > m_Headers.m_SequenceParam.GetCurrentID()) ||
-        (0 > m_Headers.m_SequenceParamExt.GetCurrentID()))
+    if (!m_Headers.m_SequenceParam.GetHeader() || !m_Headers.m_SequenceParam.GetHeader()->GetSeqExt() ||
+        !m_Headers.m_PictureHeader.GetHeader() || !m_Headers.m_PictureHeader.GetHeader()->GetPicExt())
     {
         return 0;
     }
@@ -2048,26 +2064,24 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
     SwapperBase * swapper = m_pNALSplitter->GetSwapper();
     swapper->SwapMemory(&pSlice->m_source, &memCopy, &removed_offsets);
 
-    pSlice->SetSeqHeader(m_Headers.m_SequenceParam.GetCurrentHeader());
+    pSlice->SetSeqHeader(m_Headers.m_SequenceParam.GetHeader());
     if (!pSlice->GetSeqHeader())
     {
         return 0;
     }
 
-    pSlice->SetSeqHeaderExt(m_Headers.m_SequenceParamExt.GetCurrentHeader());
-    if (!pSlice->GetSeqHeaderExt())
+    if (!pSlice->GetSeqHeader()->GetSeqExt())
     {
         return 0;
     }
 
-    pSlice->SetPicHeader(m_Headers.m_PictureParam.GetCurrentHeader());
+    pSlice->SetPicHeader(m_Headers.m_PictureHeader.GetHeader());
     if (!pSlice->GetPicHeader())
     {
         return 0;
     }
 
-    pSlice->SetPicHeaderExt(m_Headers.m_PictureParamExt.GetCurrentHeader());
-    if (!pSlice->GetPicHeaderExt())
+    if (!pSlice->GetPicHeader()->GetPicExt())
     {
         return 0;
     }
@@ -2382,9 +2396,9 @@ void TaskSupplier_MPEG2::CompleteFrame(MPEG2DecoderFrame * pFrame)
 UMC::Status TaskSupplier_MPEG2::InitFreeFrame(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
 {
     UMC::Status umcRes = UMC::UMC_OK;
-    const MPEG2PictureHeader *pic         = pSlice->GetPicHeader();
-    const MPEG2SequenceHeader * seq       = pSlice->GetSeqHeader();
-    const MPEG2SequenceExtension * seqExt = pSlice->GetSeqHeaderExt();
+    const MPEG2PictureHeader *     pic    = pSlice->GetPicHeader();
+    const MPEG2SequenceHeader *    seq    = pSlice->GetSeqHeader();
+    const MPEG2SequenceExtension * seqExt = seq->GetSeqExt();
 
     pFrame->m_FrameType = (UMC::FrameType)pic->picture_coding_type;
     pFrame->m_dFrameTime = pSlice->m_source.GetTime();
