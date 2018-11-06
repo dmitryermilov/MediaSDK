@@ -168,7 +168,8 @@ void MPEG2DecoderFrame::Reset()
 
     deallocate();
 
-    m_refPicList.clear();
+    m_refPicList[0] = nullptr;
+    m_refPicList[1] = nullptr;
 }
 
 // Returns whether frame has all slices found
@@ -294,29 +295,17 @@ void MPEG2DecoderFrame::AddSlice(MPEG2Slice * pSlice)
     pSlice->SetSliceNumber(iSliceNumber);
     pSlice->m_pCurrentFrame = this;
     m_pSlicesInfo->AddSlice(pSlice);
-
-    m_refPicList.resize(pSlice->GetSliceNum() + 1);
 }
 
 bool MPEG2DecoderFrame::CheckReferenceFrameError()
 {
     uint32_t checkedErrorMask = UMC::ERROR_FRAME_MINOR | UMC::ERROR_FRAME_MAJOR | UMC::ERROR_FRAME_REFERENCE_FRAME;
-    for (size_t i = 0; i < m_refPicList.size(); i ++)
-    {
-        MPEG2DecoderRefPicList* list = &m_refPicList[i].m_refPicList[REF_PIC_LIST_0];
-        for (size_t k = 0; list->m_refPicList[k].refFrame; k++)
-        {
-            if (list->m_refPicList[k].refFrame->GetError() & checkedErrorMask)
-                return true;
-        }
 
-        list = &m_refPicList[i].m_refPicList[REF_PIC_LIST_1];
-        for (size_t k = 0; list->m_refPicList[k].refFrame; k++)
-        {
-            if (list->m_refPicList[k].refFrame->GetError() & checkedErrorMask)
-                return true;
-        }
-    }
+    if (m_refPicList[0] && m_refPicList[0]->GetError() & checkedErrorMask)
+        return true;
+
+    if (m_refPicList[1] && m_refPicList[1]->GetError() & checkedErrorMask)
+        return true;
 
     return false;
 }

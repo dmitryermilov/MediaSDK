@@ -123,10 +123,28 @@ void PackerVA::PackPicParams(const MPEG2DecoderFrame *pCurrentFrame, MPEG2Decode
     picParamBuf->SetDataSize(sizeof(VAPictureParameterBufferMPEG2));
     memset(picParam, 0, sizeof(VAPictureParameterBufferMPEG2));
 
+    const MPEG2DecoderFrame* pRefPic0 = pCurrentFrame->GetRefPicList(0);
+    const MPEG2DecoderFrame* pRefPic1 = pCurrentFrame->GetRefPicList(1);
+
     picParam->horizontal_size = seq->horizontal_size_value;
     picParam->vertical_size   = seq->vertical_size_value;
-    picParam->forward_reference_picture  = VA_INVALID_SURFACE;
-    picParam->backward_reference_picture = VA_INVALID_SURFACE;
+
+    if (MPEG2_P_PICTURE == (FrameType)pCurrentFrame->m_FrameType && pRefPic0)
+    {
+        picParam->forward_reference_picture  = (VASurfaceID)m_va->GetSurfaceID(pRefPic0->GetFrameMID());
+        picParam->backward_reference_picture = VA_INVALID_SURFACE;
+    }
+    else if (MPEG2_B_PICTURE == (FrameType)pCurrentFrame->m_FrameType && pRefPic0 && pRefPic1)
+    {
+        picParam->forward_reference_picture  = (VASurfaceID)m_va->GetSurfaceID(pRefPic0->GetFrameMID());
+        picParam->backward_reference_picture = (VASurfaceID)m_va->GetSurfaceID(pRefPic1->GetFrameMID());
+    }
+    else
+    {
+        picParam->forward_reference_picture  = VA_INVALID_SURFACE;
+        picParam->backward_reference_picture = VA_INVALID_SURFACE;
+    }
+
     picParam->picture_coding_type = pic->picture_coding_type;
     for(uint8_t i = 0; i < 4; ++i)
     {
@@ -140,9 +158,9 @@ void PackerVA::PackPicParams(const MPEG2DecoderFrame *pCurrentFrame, MPEG2Decode
     picParam->picture_coding_extension.bits.concealment_motion_vectors = picExt->concealment_motion_vectors;
     picParam->picture_coding_extension.bits.q_scale_type               = picExt->q_scale_type;
     picParam->picture_coding_extension.bits.intra_vlc_format           = picExt->intra_vlc_format;
-    picParam->picture_coding_extension.bits.alternate_scan               = picExt->alternate_scan;
-    picParam->picture_coding_extension.bits.repeat_first_field           = picExt->repeat_first_field;
-    picParam->picture_coding_extension.bits.progressive_frame           = picExt->progressive_frame;
+    picParam->picture_coding_extension.bits.alternate_scan             = picExt->alternate_scan;
+    picParam->picture_coding_extension.bits.repeat_first_field         = picExt->repeat_first_field;
+    picParam->picture_coding_extension.bits.progressive_frame          = picExt->progressive_frame;
     picParam->picture_coding_extension.bits.is_first_field             = 1; //for now
 }
 
@@ -209,8 +227,8 @@ bool PackerVA::PackSliceParams(MPEG2Slice *pSlice, uint32_t &sliceNum, bool isLa
         memset(sliceParams, 0, sizeof(VASliceParameterBufferBase));
     }
 
-    uint32_t  rawDataSize = 0;
-    const void*   rawDataPtr = 0;
+    uint32_t    rawDataSize = 0;
+    const void* rawDataPtr = 0;
 
     pSlice->m_BitStream.GetOrg((uint32_t**)&rawDataPtr, &rawDataSize);
 

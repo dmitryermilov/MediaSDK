@@ -587,8 +587,8 @@ void ViewItem_MPEG2::Reset(void)
 // Reset the size of DPB for particular view item
 void ViewItem_MPEG2::SetDPBSize(MPEG2SeqParamSet *pSps, uint32_t & level_idc)
 {
-	dpbSize = 2;
-	/*
+    dpbSize = 2;
+    /*
     uint32_t level = level_idc ? level_idc : pSps->m_pcPTL.GetGeneralPTL()->level_idc;
 
     // calculate the new DPB size value
@@ -1593,7 +1593,28 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFrameToDisplayInternal(bool force)
 {
     ViewItem_MPEG2 &view = *GetView();
 
-    return view.pDPB->findOldestDisplayable(view.dpbSize);
+    for (;;)
+    {
+        uint32_t countDisplayable = 0;
+        int32_t maxUID = 0;
+        uint32_t countDPBFullness = 0;
+
+        view.pDPB->calculateInfoForDisplay(countDisplayable, countDPBFullness, maxUID);
+
+        // show oldest frame
+        if (countDisplayable > 2 || force)
+        {
+            MPEG2DecoderFrame *pTmp = view.pDPB->findOldestDisplayable(view.dpbSize);
+
+            if (pTmp)
+            {
+                return pTmp;
+            }
+        }
+
+        break;
+    }
+    return nullptr;
 
 #if 0
 
@@ -1949,8 +1970,7 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
             case NAL_UT_PPS:
 */
             case NAL_UT_PICTURE_HEADER:
-                if (AddSlice(0, !pSource) == UMC::UMC_OK)
-                    return UMC::UMC_OK;
+                AddSlice(0, !pSource);
             case NAL_UT_SEQUENCE_HEADER:
             case NAL_UT_EXTENSION:
                 {
@@ -2262,7 +2282,7 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
 
     if (pFrame)
     {
-    	/*
+        /*
         MPEG2Slice *firstSlice = pFrame->GetAU()->GetSlice(0);
         VM_ASSERT(firstSlice);
 
@@ -2299,6 +2319,8 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
     pSlice->m_pCurrentFrame = pFrame;
     AddSliceToFrame(pFrame, pSlice);
 
+
+/*
     if (pSlice->m_SliceHeader.slice_type != I_SLICE)
     {
         uint32_t NumShortTermRefs = 0, NumLongTermRefs = 0;
@@ -2307,7 +2329,7 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
         if (NumShortTermRefs + NumLongTermRefs == 0)
             AddFakeReferenceFrame(pSlice);
     }
-/*
+
     MPEG2PicParamSet const* pps = pSlice->GetPicParam();
     VM_ASSERT(pps);
 
@@ -2317,6 +2339,8 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
     // Set reference list
     pSlice->UpdateReferenceList(GetView()->pDPB.get(), curr_ref);
 */
+    // ref list
+
     return UMC::UMC_ERR_NOT_ENOUGH_DATA;
 }
 
@@ -2344,7 +2368,6 @@ void TaskSupplier_MPEG2::OnFullFrame(MPEG2DecoderFrame * pFrame)
         return;
 
     pFrame->SetisDisplayable(true);
-    //pFrame->SetisDisplayable(pFrame->GetAU()->GetSlice(0)->GetSliceHeader()->pic_output_flag != 0);
 
     if (pFrame->GetAU()->GetSlice(0)->GetSliceHeader()->IdrPicFlag && !(pFrame->GetError() & UMC::ERROR_FRAME_DPB))
     {
@@ -2488,9 +2511,6 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
         return NULL;
     }
 
-    //CheckCRAOrBLA(pSlice);
-
-    //pFrame->m_pic_output = pSlice->GetSliceHeader()->pic_output_flag != 0;
     pFrame->SetisShortTermRef(true);
 
     UMC::Status umcRes = InitFreeFrame(pFrame, pSlice);
@@ -2536,18 +2556,6 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
 // Initialize frame's counter and corresponding parameters
 void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
 {
-/*
-    const MPEG2SliceHeader_ *sliceHeader = pSlice->GetSliceHeader_();
-
-    ViewItem_MPEG2 &view = *GetView();
-
-    if (sliceHeader->IdrPicFlag ||
-        sliceHeader->nal_unit_type == NAL_UT_CODED_SLICE_BLA_N_LP || sliceHeader->nal_unit_type == NAL_UT_CODED_SLICE_BLA_W_RADL ||
-        sliceHeader->nal_unit_type == NAL_UT_CODED_SLICE_BLA_W_LP)
-    {
-        view.pDPB->IncreaseRefPicListResetCount(pFrame);
-    }
-*/
     const MPEG2PictureHeader * pic = pSlice->GetPicHeader();
     pFrame->setPicOrderCnt(pic->temporal_reference);
 
@@ -2555,22 +2563,77 @@ void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG
 
     pFrame->InitRefPicListResetCount();
 
+    if (MPEG2_P_PICTURE == (FrameType)pFrame->m_FrameType || MPEG2_B_PICTURE == (FrameType)pFrame->m_FrameType)
+    {
+        for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+        {
+            if (pTmp == pFrame || !pTmp->isShortTermRef())
+                continue;
+
+            if (pTmp->PicOrderCnt() < pFrame->PicOrderCnt())
+            {
+                pFrame->SetForwardRefPic(pTmp);
+                break;
+            }
+
+        }
+    }
+
+    if (MPEG2_B_PICTURE == (FrameType)pFrame->m_FrameType)
+    {
+        for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+        {
+            if (pTmp == pFrame)
+                continue;
+
+            if (pTmp->PicOrderCnt() > pFrame->PicOrderCnt())
+            {
+                pFrame->SetBackwardRefPic(pTmp);
+                break;
+            }
+        }
+    }
+
 } // void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
 
 // Include a new slice into a set of frame slices
 void TaskSupplier_MPEG2::AddSliceToFrame(MPEG2DecoderFrame *pFrame, MPEG2Slice *pSlice)
 {
-    if (pFrame->m_FrameType < SliceTypeToFrameType(pSlice->GetSliceHeader()->slice_type))
-        pFrame->m_FrameType = SliceTypeToFrameType(pSlice->GetSliceHeader()->slice_type);
-
     pFrame->AddSlice(pSlice);;
 }
 
 // Update DPB contents marking frames for reuse
 void TaskSupplier_MPEG2::DPBUpdate(const MPEG2Slice * slice)
 {
+    const MPEG2PictureHeader*  pic = slice->GetPicHeader();
+    if (MPEG2_B_PICTURE == pic->picture_coding_type)
+        return;
+
+    uint32_t NumShortTermRefs, NumLongTermRefs;
+
+    // find out how many active reference frames currently in decoded
+    // frames buffer
+    ViewItem_MPEG2 &view = *GetView();
+    view.pDPB->countActiveRefs(NumShortTermRefs, NumLongTermRefs);
+    while (NumShortTermRefs > 0 &&
+        (NumShortTermRefs + NumLongTermRefs >= 2))
+    {
+        // mark oldest short-term reference as unused
+        VM_ASSERT(NumShortTermRefs > 0);
+
+        MPEG2DecoderFrame * pFrame = view.pDPB->findOldestShortTermRef();
+
+        if (!pFrame)
+            break;
+
+        pFrame->SetisShortTermRef(false);
+        NumShortTermRefs--;
+    }
+    /*
+
     ViewItem_MPEG2 &view = *GetView();
     DecReferencePictureMarking_MPEG2::UpdateRefPicMarking(view, slice);
+    */
 }
 
 // Find a decoder frame instance with specified surface ID

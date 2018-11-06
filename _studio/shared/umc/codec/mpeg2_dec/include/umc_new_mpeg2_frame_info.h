@@ -80,11 +80,6 @@ public:
 
         const MPEG2SliceHeader &sliceHeader = *(pSlice->GetSliceHeader());
 
-        m_isIntraAU = m_isIntraAU && (sliceHeader.slice_type == I_SLICE);
-        m_IsIDR     = sliceHeader.IdrPicFlag != 0;
-        m_hasDependentSliceSegments = m_hasDependentSliceSegments || sliceHeader.dependent_slice_segment_flag;
-        m_isNeedDeblocking = m_isNeedDeblocking || (!sliceHeader.slice_deblocking_filter_disabled_flag);
-        m_isNeedSAO = m_isNeedSAO || (sliceHeader.slice_sao_luma_flag || sliceHeader.slice_sao_chroma_flag);
         m_hasTiles = false;
 
         m_WA_different_disable_deblocking = m_WA_different_disable_deblocking || (sliceHeader.slice_deblocking_filter_disabled_flag != m_pSliceQueue[0]->GetSliceHeader()->slice_deblocking_filter_disabled_flag);
