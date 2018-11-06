@@ -121,6 +121,25 @@ public:
     // Try to find a frame closest to specified for error recovery
     MPEG2DecoderFrame * FindClosest(MPEG2DecoderFrame * pFrame);
 
+    MPEG2DecoderFrame * findOldestShortTermRef()
+    {
+        MPEG2DecoderFrame *pCurr = m_pHead;
+        MPEG2DecoderFrame *pOldest = 0;
+        int32_t  SmallestFrameNumWrap = 0x0fffffff;    // very large positive
+
+        while (pCurr)
+        {
+            if (pCurr->isShortTermRef() && (pCurr->PicOrderCnt() < SmallestFrameNumWrap))
+            {
+                pOldest = pCurr;
+                SmallestFrameNumWrap = pCurr->PicOrderCnt();
+            }
+            pCurr = pCurr->future();
+        }
+
+        return pOldest;
+    }    // findOldestShortTermRef
+
     int32_t GetDPBSize() const
     {
         return m_dpbSize;

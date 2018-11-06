@@ -785,17 +785,30 @@ mfxStatus VideoDECODEMPEG2::Reset(mfxVideoParam *par)
     return MFX_ERR_NONE;
 }
 
-mfxStatus VideoDECODEMPEG2::Close()
+// Free decoder resources
+mfxStatus VideoDECODEMPEG2::Close(void)
 {
-    MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_API, "VideoDECODEMPEG2::Close");
-    // immediately return, object is not initialized
-    if (false == m_isInitialized)
-    {
-        return MFX_ERR_NONE;
-    }
+    MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_API, "VideoDECODEH265::Close");
+    UMC::AutomaticUMCMutex guard(m_mGuard);
 
-    internalImpl->Close();
-    m_isInitialized = false;
+    if (!m_isInit || !m_pH265VideoDecoder.get())
+        return MFX_ERR_NOT_INITIALIZED;
+
+    m_pH265VideoDecoder->Close();
+    m_FrameAllocator->Close();
+
+    if (m_response.NumFrameActual)
+        m_core->FreeFrames(&m_response);
+
+    if (m_response_alien.NumFrameActual)
+        m_core->FreeFrames(&m_response_alien);
+
+    m_isOpaq = false;
+    m_isInit = false;
+    m_isFirstRun = true;
+    m_frameOrder = (mfxU16)MFX_FRAMEORDER_UNKNOWN;
+    m_va = 0;
+    memset(&m_stat, 0, sizeof(m_stat));
 
     return MFX_ERR_NONE;
 }

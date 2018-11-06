@@ -147,9 +147,6 @@ public:
     int32_t GetMaxMB(void) const {return m_iMaxMB;}
     void SetMaxMB(int32_t x) {m_iMaxMB = x;}
 
-    // Build reference lists from slice reference pic set. MPEG2 spec 8.3.2
-    virtual UMC::Status UpdateReferenceList(MPEG2DBPList *dpb, MPEG2DecoderFrame* curr_ref);
-
     bool IsError() const {return m_bError;}
 
 public:

@@ -36,51 +36,6 @@ class MPEG2Slice;
 class MPEG2DecoderFrameInfo;
 class MPEG2CodingUnit;
 
-// Struct containing list 0 and list 1 reference picture lists for one slice.
-// Length is plus 1 to provide for null termination.
-class MPEG2DecoderRefPicList
-{
-public:
-
-    struct ReferenceInformation // flags use for reference frames of slice
-    {
-        MPEG2DecoderFrame * refFrame;
-        bool isLongReference;
-    };
-
-    ReferenceInformation *m_refPicList;
-
-    MPEG2DecoderRefPicList()
-    {
-        memset(m_refPicList1, 0, sizeof(m_refPicList1));
-
-        m_refPicList = &(m_refPicList1[1]);
-
-        m_refPicList1[0].refFrame = 0;
-        m_refPicList1[0].isLongReference = 0;
-    }
-
-    void Reset()
-    {
-        memset(&m_refPicList1, 0, sizeof(m_refPicList1));
-    }
-
-    MPEG2DecoderRefPicList (const MPEG2DecoderRefPicList& copy)
-    {
-        m_refPicList = &(m_refPicList1[1]);
-        MFX_INTERNAL_CPY(&m_refPicList1, &copy.m_refPicList1, sizeof(m_refPicList1));
-    }
-
-    MPEG2DecoderRefPicList& operator=(const MPEG2DecoderRefPicList & copy)
-    {
-        MFX_INTERNAL_CPY(&m_refPicList1, &copy.m_refPicList1, sizeof(m_refPicList1));
-        return *this;
-    }
-
-private:
-    ReferenceInformation m_refPicList1[MAX_NUM_REF_PICS + 3];
-};
-
 // MPEG2 decoder frame class
 class MPEG2DecoderFrame : public MPEG2DecYUVBufferPadded, public RefCounter
 {
@@ -208,7 +163,7 @@ public:
     {
         m_isDisplayable = isDisplayable ? 1 : 0;
     }
-
+//
     bool IsDecodingStarted() const { return m_Flags.isDecodingStarted != 0;}
     void StartDecoding() { m_Flags.isDecodingStarted = 1;}
 
@@ -270,18 +225,21 @@ public:
         return m_RefPicListResetCount;
     }
 
-    // GetRefPicList
-    // Returns pointer to start of specified ref pic list.
-    MPEG2_FORCEINLINE const MPEG2DecoderRefPicList* GetRefPicList(int32_t sliceNumber, int32_t list) const
+    MPEG2_FORCEINLINE const MPEG2DecoderFrame* GetRefPicList(uint8_t direction) const
     {
-        VM_ASSERT(list <= REF_PIC_LIST_1 && list >= 0);
+        return m_refPicList[direction];
+    }
 
-        if (sliceNumber >= (int32_t)m_refPicList.size())
-        {
-            return 0;
-        }
+    void SetForwardRefPic(MPEG2DecoderFrame * frm)
+    {
+        AddReferenceFrame(frm);
+        m_refPicList[0] = frm;
+    }
 
-        return &m_refPicList[sliceNumber].m_refPicList[list];
+    void SetBackwardRefPic(MPEG2DecoderFrame * frm)
+    {
+        AddReferenceFrame(frm);
+        m_refPicList[1] = frm;
     }
 
     int32_t GetError() const
@@ -299,24 +257,12 @@ public:
         m_ErrorType |= errorType;
     }
 
-
-
     void AddSlice(MPEG2Slice * pSlice);
 
 protected:
-    // Declare memory management tools
-    UMC::MemoryAllocator *m_pMemoryAllocator;   // FIXME: should be removed because it duplicated in base class
-
     Heap_Objects * m_pObjHeap;
 
-    struct MPEG2DecoderRefPicListPair
-    {
-    public:
-        MPEG2DecoderRefPicList m_refPicList[2];
-    };
-
-    // ML: OPT: TODO: std::vector<> results with relatively slow access code
-    std::vector<MPEG2DecoderRefPicListPair> m_refPicList;
+    MPEG2DecoderFrame * m_refPicList[2];
 
     class FakeFrameInitializer
     {
