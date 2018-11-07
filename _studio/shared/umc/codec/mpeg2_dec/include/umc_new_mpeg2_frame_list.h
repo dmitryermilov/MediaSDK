@@ -129,10 +129,10 @@ public:
 
         while (pCurr)
         {
-            if (pCurr->isShortTermRef() && (pCurr->PicOrderCnt() < SmallestFrameNumWrap))
+            if (pCurr->isShortTermRef() && (pCurr->m_displayOrder < SmallestFrameNumWrap))
             {
                 pOldest = pCurr;
-                SmallestFrameNumWrap = pCurr->PicOrderCnt();
+                SmallestFrameNumWrap = pCurr->m_displayOrder;
             }
             pCurr = pCurr->future();
         }

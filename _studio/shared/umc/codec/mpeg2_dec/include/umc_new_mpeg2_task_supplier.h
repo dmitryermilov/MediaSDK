@@ -428,6 +428,12 @@ protected:
     // If a frame has all slices found, add it to asynchronous decode queue
     UMC::Status CompleteDecodedFrames(MPEG2DecoderFrame ** decoded);
 
+    // Reordering logic
+    virtual void MarkFramesDisplayable(MPEG2DecoderFrame * pFrame);
+
+    // Sets forward and backward references
+    virtual void SetReferences(MPEG2DecoderFrame * pFrame);
+
     // Try to reset in case DPB has overflown
     void PreventDPBFullness();
 
