@@ -187,10 +187,10 @@ MPEG2DecoderFrame * MPEG2DBPList::findOldestDisplayable(int32_t /*dbpSize*/ )
     {
         if (pCurr->isDisplayable() && !pCurr->wasOutputted())
         {
-            if (pCurr->PicOrderCnt() <= SmallestPicOrderCnt)
+            if (pCurr->m_displayOrder <= SmallestPicOrderCnt)
             {
                 pOldest = pCurr;
-                SmallestPicOrderCnt = pCurr->PicOrderCnt();
+                SmallestPicOrderCnt = pCurr->m_displayOrder;
             }
 
         }

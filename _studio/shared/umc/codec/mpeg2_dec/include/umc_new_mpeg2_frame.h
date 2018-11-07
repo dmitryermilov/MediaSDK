@@ -44,6 +44,8 @@ public:
     int32_t  m_PicOrderCnt;    // Display order picture count mod MAX_PIC_ORDER_CNT.
 
     int32_t  m_frameOrder;
+    uint32_t m_decOrder;
+    int32_t m_displayOrder;
     int32_t  m_ErrorType;
 
     MPEG2DecoderFrameInfo * m_pSlicesInfo;
@@ -86,11 +88,11 @@ public:
     int32_t           m_aspect_width;
     int32_t           m_aspect_height;
 
-    bool             m_pic_output;
+    bool              m_pic_output;
 
-    bool             m_isShortTermRef;
-    bool             m_isLongTermRef;
-    bool             m_isUsedAsReference;
+    bool              m_isShortTermRef;
+    bool              m_isLongTermRef;
+    bool              m_isUsedAsReference;
 
     // Returns whether frame has all slices found
     bool IsFullFrame() const;
@@ -108,7 +110,7 @@ public:
     uint8_t  m_isDisplayable;
     uint8_t  m_wasDisplayed;
     uint8_t  m_wasOutputted;
-    int32_t m_maxUIDWhenWasDisplayed;
+    int32_t  m_maxUIDWhenWasDisplayed;
 
     typedef std::list<RefCounter *>  ReferenceList;
     ReferenceList m_references;
@@ -163,7 +165,7 @@ public:
     {
         m_isDisplayable = isDisplayable ? 1 : 0;
     }
-//
+
     bool IsDecodingStarted() const { return m_Flags.isDecodingStarted != 0;}
     void StartDecoding() { m_Flags.isDecodingStarted = 1;}
 

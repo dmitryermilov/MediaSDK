@@ -1713,7 +1713,7 @@ mfxStatus VideoDECODEMPEG2::DecodeFrameCheck(mfxBitstream *bs, mfxFrameSurface1 
             }
             else
             {
-                    umcRes = m_pH265VideoDecoder->AddSource(bs ? &src : 0);
+                umcRes = m_pH265VideoDecoder->AddSource(bs ? &src : 0);
             }
 
             umcAddSourceRes = umcFrameRes = umcRes;

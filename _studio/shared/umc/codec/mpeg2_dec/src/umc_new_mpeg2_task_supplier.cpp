@@ -994,12 +994,16 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFreeFrame()
 
     pFrame->Reset();
 
+    pFrame->m_decOrder     = m_UIDFrameCounter;
+    pFrame->m_displayOrder = pFrame->m_decOrder;
+
     // Set current as not displayable (yet) and not outputted. Will be
     // updated to displayable after successful decode.
     pFrame->IncrementReference();
 
     m_UIDFrameCounter++;
     pFrame->m_UID = m_UIDFrameCounter;
+
     return pFrame;
 }
 
@@ -1614,50 +1618,7 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFrameToDisplayInternal(bool force)
 
         break;
     }
-    return nullptr;
 
-#if 0
-
-    if (m_decodedOrder)
-    {
-        return view.pDPB->findOldestDisplayable(view.dpbSize);
-    }
-
-    for (;;)
-    {
-    // show oldest frame
-
-    uint32_t countDisplayable = 0;
-    int32_t maxUID = 0;
-    uint32_t countDPBFullness = 0;
-
-    view.pDPB->calculateInfoForDisplay(countDisplayable, countDPBFullness, maxUID);
-    DEBUG_PRINT1((VM_STRING("GetAnyFrameToDisplay DPB displayable %d, maximum %d, force = %d\n"), countDisplayable, view.maxDecFrameBuffering, force));
-
-    if (countDisplayable > view.sps_max_num_reorder_pics || countDPBFullness > view.sps_max_dec_pic_buffering || force)
-    {
-        MPEG2DecoderFrame *pTmp = view.pDPB->findOldestDisplayable(view.dpbSize);
-
-        if (pTmp)
-        {
-            if (!force && countDisplayable <= pTmp->GetAU()->GetSeqParam()->sps_max_num_reorder_pics[0] && countDPBFullness <= view.sps_max_dec_pic_buffering)
-                return 0;
-
-            if (!pTmp->m_pic_output)
-            {
-                DEBUG_PRINT((VM_STRING("Outputted skip frame %s\n"), GetFrameInfoString(pTmp)));
-                pTmp->setWasDisplayed();
-                pTmp->setWasOutputted();
-                continue;
-            }
-
-            pTmp->m_maxUIDWhenWasDisplayed = maxUID;
-            return pTmp;
-        }
-    }
-    break;
-    }
-#endif
     return 0;
 }
 
@@ -1970,7 +1931,7 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
             case NAL_UT_PPS:
 */
             case NAL_UT_PICTURE_HEADER:
-                AddSlice(0, !pSource);
+                AddSlice(0, false);
             case NAL_UT_SEQUENCE_HEADER:
             case NAL_UT_EXTENSION:
                 {
@@ -2255,7 +2216,7 @@ bool TaskSupplier_MPEG2::IsSkipForCRAorBLA(const MPEG2Slice *pSlice)
 }
 
 // Add a new slice to frame
-UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
+UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool force)
 {
     MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_HOTSPOTS, "TaskSupplier_MPEG2::AddSlice");
     m_pLastSlice = 0;
@@ -2273,6 +2234,13 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
 
         OnFullFrame(GetView()->pCurFrame);
         GetView()->pCurFrame = NULL;
+
+        if (force)
+        {
+            MarkFramesDisplayable(0);
+            return umcRes;
+        }
+
         umcRes = UMC::UMC_OK;
         return umcRes;
     }
@@ -2280,27 +2248,9 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
     ViewItem_MPEG2 &view = *GetView();
     MPEG2DecoderFrame * pFrame = view.pCurFrame;
 
-    if (pFrame)
-    {
-        /*
-        MPEG2Slice *firstSlice = pFrame->GetAU()->GetSlice(0);
-        VM_ASSERT(firstSlice);
-
-        bool changed = IsPictureTheSame(firstSlice, pSlice);
-
-        if (changed)
-        {
-            CompleteFrame(view.pCurFrame);
-            OnFullFrame(view.pCurFrame);
-            view.pCurFrame = NULL;
-            m_pLastSlice = pSlice;
-            return UMC::UMC_OK;
-        }
-        */
-    }
     // there is no free frames.
     // try to allocate a new frame.
-    else
+    if (!pFrame)
     {
         // allocate a new frame, initialize it with slice's parameters.
         pFrame = AllocateNewFrame(pSlice);
@@ -2313,35 +2263,72 @@ UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool )
 
         // set the current being processed frame
         view.pCurFrame = pFrame;
+
+        SetReferences(pFrame);
     }
 
     // add the next slice to the initialized frame.
     pSlice->m_pCurrentFrame = pFrame;
     AddSliceToFrame(pFrame, pSlice);
 
+    return UMC::UMC_ERR_NOT_ENOUGH_DATA;
+}
 
-/*
-    if (pSlice->m_SliceHeader.slice_type != I_SLICE)
+void TaskSupplier_MPEG2::SetReferences(MPEG2DecoderFrame * pFrame)
+{
+    if (!pFrame)
+        return;
+
+    if (MPEG2_P_PICTURE == (FrameType)pFrame->m_FrameType)
     {
-        uint32_t NumShortTermRefs = 0, NumLongTermRefs = 0;
-        view.pDPB->countActiveRefs(NumShortTermRefs, NumLongTermRefs);
+        MPEG2DecoderFrame * pClosestRef = nullptr;
+        uint32_t distance = 0xffffffff;
+        for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+        {
+            if (pTmp == pFrame || !pTmp->isShortTermRef())
+                continue;
 
-        if (NumShortTermRefs + NumLongTermRefs == 0)
-            AddFakeReferenceFrame(pSlice);
+            if ((pFrame->m_decOrder - pTmp->m_decOrder) < distance)
+            {
+                distance = pFrame->m_decOrder - pTmp->m_decOrder;
+                pClosestRef = pTmp;
+            }
+        }
+        pFrame->SetForwardRefPic(pClosestRef);
     }
 
-    MPEG2PicParamSet const* pps = pSlice->GetPicParam();
-    VM_ASSERT(pps);
+    if (MPEG2_B_PICTURE == (FrameType)pFrame->m_FrameType)
+    {
+        MPEG2DecoderFrame * pClosestRef = nullptr;
+        uint32_t distance = 0xffffffff;
+        for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+        {
+            if (pTmp == pFrame || !pTmp->isShortTermRef())
+                continue;
 
-    MPEG2DecoderFrame* curr_ref = pps->pps_curr_pic_ref_enabled_flag ?
-        AddSelfReferenceFrame(pSlice) : nullptr;
+            if ((pFrame->m_decOrder - pTmp->m_decOrder) < distance)
+            {
+                distance = pFrame->m_decOrder - pTmp->m_decOrder;
+                pClosestRef = pTmp;
+            }
+        }
+        pFrame->SetBackwardRefPic(pClosestRef);
 
-    // Set reference list
-    pSlice->UpdateReferenceList(GetView()->pDPB.get(), curr_ref);
-*/
-    // ref list
+        MPEG2DecoderFrame * pAnotherClosestRef = nullptr;
+        distance = 0xffffffff;
+        for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+        {
+            if (pTmp == pFrame || !pTmp->isShortTermRef())
+                continue;
 
-    return UMC::UMC_ERR_NOT_ENOUGH_DATA;
+            if (((pFrame->m_decOrder - pTmp->m_decOrder) < distance) && (pTmp->m_decOrder < pClosestRef->m_decOrder))
+            {
+                distance = pFrame->m_decOrder - pTmp->m_decOrder;
+                pAnotherClosestRef = pTmp;
+            }
+        }
+        pFrame->SetForwardRefPic(pAnotherClosestRef);
+    }
 }
 
 // Not implemented
@@ -2358,7 +2345,6 @@ MPEG2DecoderFrame* TaskSupplier_MPEG2::AddSelfReferenceFrame(MPEG2Slice* slice)
         slice->GetCurrentFrame();
 }
 
-
 // Mark frame as full with slices
 void TaskSupplier_MPEG2::OnFullFrame(MPEG2DecoderFrame * pFrame)
 {
@@ -2366,8 +2352,6 @@ void TaskSupplier_MPEG2::OnFullFrame(MPEG2DecoderFrame * pFrame)
 
     if (!pFrame->GetAU()->GetSlice(0)) // seems that it was skipped and slices was dropped
         return;
-
-    pFrame->SetisDisplayable(true);
 
     if (pFrame->GetAU()->GetSlice(0)->GetSliceHeader()->IdrPicFlag && !(pFrame->GetError() & UMC::ERROR_FRAME_DPB))
     {
@@ -2511,13 +2495,13 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
         return NULL;
     }
 
-    pFrame->SetisShortTermRef(true);
-
     UMC::Status umcRes = InitFreeFrame(pFrame, pSlice);
     if (umcRes != UMC::UMC_OK)
     {
         return 0;
     }
+
+    pFrame->SetisShortTermRef(MPEG2_B_PICTURE != (FrameType)pFrame->m_FrameType);
 
     umcRes = AllocateFrameData(pFrame, pFrame->lumaSize(), pSlice->GetSeqParam(), pSlice->GetPicParam());
     if (umcRes != UMC::UMC_OK)
@@ -2547,13 +2531,12 @@ MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlic
         pFrame->m_DisplayPictureStruct_MPEG2 = DPS_FRAME_MPEG2;
     }
 
-
     InitFrameCounter(pFrame, pSlice);
+
     return pFrame;
 
 } // MPEG2DecoderFrame * TaskSupplier_MPEG2::AllocateNewFrame(const MPEG2Slice *pSlice)
 
-// Initialize frame's counter and corresponding parameters
 void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
 {
     const MPEG2PictureHeader * pic = pSlice->GetPicHeader();
@@ -2563,43 +2546,80 @@ void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG
 
     pFrame->InitRefPicListResetCount();
 
-    if (MPEG2_P_PICTURE == (FrameType)pFrame->m_FrameType || MPEG2_B_PICTURE == (FrameType)pFrame->m_FrameType)
+    MarkFramesDisplayable(pFrame);
+}
+
+void TaskSupplier_MPEG2::MarkFramesDisplayable(MPEG2DecoderFrame * pFrame)
+{
+    if (pFrame)
+    {
+        // - If a current frame is a B-frame, then output it immediately.
+        // - if a current frame is a I-frame or P-frame, then output previous (in decoded order) I-frame or P-frame.
+        if (MPEG2_B_PICTURE == (FrameType)pFrame->m_FrameType)
+        {
+            pFrame->SetisDisplayable(true);
+
+            uint32_t distance = 0xffffffff;
+            MPEG2DecoderFrame * pLatestIPFrame = nullptr;
+
+            for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+            {
+                if ((pTmp == pFrame) || (MPEG2_B_PICTURE == (FrameType)pTmp->m_FrameType))
+                    continue;
+
+                if (std::abs(pFrame->m_decOrder - pTmp->m_decOrder) < distance)
+                {
+                    distance = std::abs(pFrame->m_decOrder - pTmp->m_decOrder);
+                    pLatestIPFrame = pTmp;
+                }
+            }
+
+            if (pLatestIPFrame)
+            {
+                // Here we build display order in case of reordered frames:
+                pFrame->m_displayOrder         = pLatestIPFrame->m_displayOrder; // 1. Output B frames sooner than their decoded order
+                pLatestIPFrame->m_displayOrder = pFrame->m_decOrder;             // 2. Delay displaying I/P frames accordingly
+            }
+        }
+        else
+        {
+            uint32_t distance = 0xffffffff;
+            MPEG2DecoderFrame * pLatestIPFrame = nullptr;
+
+            for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
+            {
+                if (pTmp == pFrame || MPEG2_B_PICTURE == (FrameType)pTmp->m_FrameType)
+                    continue;
+
+                // Find previous I or P in decoded order ...
+                if (std::abs(pFrame->m_decOrder - pTmp->m_decOrder) < distance)
+                {
+                    distance = std::abs(pFrame->m_decOrder - pTmp->m_decOrder);
+                    pLatestIPFrame = pTmp;
+                }
+            }
+            // ... and make it displayable
+            if (pLatestIPFrame)
+            {
+                pLatestIPFrame->SetisDisplayable(true);
+            }
+        }
+    }
+    else
     {
         for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
         {
-            if (pTmp == pFrame || !pTmp->isShortTermRef())
-                continue;
-
-            if (pTmp->PicOrderCnt() < pFrame->PicOrderCnt())
-            {
-                pFrame->SetForwardRefPic(pTmp);
-                break;
-            }
-
+            if (pTmp->IsFullFrame())
+                pTmp->SetisDisplayable(true);
         }
+        return;
     }
-
-    if (MPEG2_B_PICTURE == (FrameType)pFrame->m_FrameType)
-    {
-        for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
-        {
-            if (pTmp == pFrame)
-                continue;
-
-            if (pTmp->PicOrderCnt() > pFrame->PicOrderCnt())
-            {
-                pFrame->SetBackwardRefPic(pTmp);
-                break;
-            }
-        }
-    }
-
-} // void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG2Slice *pSlice)
+}
 
 // Include a new slice into a set of frame slices
 void TaskSupplier_MPEG2::AddSliceToFrame(MPEG2DecoderFrame *pFrame, MPEG2Slice *pSlice)
 {
-    pFrame->AddSlice(pSlice);;
+    pFrame->AddSlice(pSlice);
 }
 
 // Update DPB contents marking frames for reuse

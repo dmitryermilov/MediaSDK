@@ -77,6 +77,8 @@ MPEG2DecoderFrame::MPEG2DecoderFrame(UMC::MemoryAllocator *pMemoryAllocator, Hea
     m_crop_right = 0;
     m_DisplayPictureStruct_MPEG2 = DPS_FRAME_MPEG2;
     m_frameOrder = 0;
+    m_decOrder   = 0;
+    m_displayOrder = 0xffffffff;
     prepared = false;
 }
 
