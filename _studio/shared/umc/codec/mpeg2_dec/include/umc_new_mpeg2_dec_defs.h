@@ -1582,6 +1582,8 @@ struct MPEG2SliceHeader_
     ///////////////////////////////////////////////////////
     uint32_t m_HeaderBitstreamOffset;
     uint32_t m_MbOffset;
+    uint32_t m_macroblock_address_increment;
+
     //mpeg2 elements of slice header
     const MPEG2SequenceHeader*           m_SequenceParam;
     const MPEG2SequenceExtension*        m_SequenceParamExt;

@@ -1629,18 +1629,120 @@ UMC::Status MPEG2HeadersBitstream::GetSliceHeader(MPEG2SliceHeader_ * sliceHdr, 
     if (Check1Bit())
     {
         sliceHdr->intra_slice_flag = GetBits(1);
-		sliceHdr->intra_slice = GetBits(1);
-		GetBits(7); // reserved_bits
+        sliceHdr->intra_slice = GetBits(1);
+        GetBits(7); // reserved_bits
 
-		while (Check1Bit())
-		{
-			GetBits(1);  // extra_bit_slice
-			GetBits(8);  // extra_information_slice
+        while (Check1Bit())
+        {
+            GetBits(1);  // extra_bit_slice
+            GetBits(8);  // extra_information_slice
         }
     }
 
     GetBits(1);  // extra_bit_slice
 
+    return UMC::UMC_OK;
+}
+
+struct VLCEntry
+{
+    int8_t value;
+    int8_t length;
+};
+
+static const VLCEntry MBAddrIncrTabB1_1[16] =
+{
+    { -2 + 1, 48 - 48 }, { -2 + 1, 67 - 67 },
+    { 2 + 5,   3 + 2 },  { 2 + 4,   3 + 2 },
+    { 0 + 5,   1 + 3 },  { 4 + 1,   2 + 2 },
+    { 3 + 1,   2 + 2 },  { 0 + 4,   3 + 1 },
+    { 2 + 1,   2 + 1 },  { 0 + 3,   0 + 3 },
+    { 1 + 2,   2 + 1 },  { 1 + 2,   1 + 2 },
+    { 0 + 2,   2 + 1 },  { 1 + 1,   2 + 1 },
+    { 0 + 2,   2 + 1 },  { 0 + 2,   2 + 1 },
+};
+
+static const VLCEntry MBAddrIncrTabB1_2[104] =
+{
+    { 18 + 15, 5 + 6 }, { 18 + 14, 0 + 11 }, { 12 + 19, 7 + 4 }, { 6 + 24, 7 + 4 },
+    { 4 + 25, 4 + 7 },  { 1 + 27, 0 + 11 },  { 4 + 23, 2 + 9 },  { 15 + 11, 3 + 8 },
+    { 22 + 3, 1 + 10 }, { 15 + 9, 2 + 9 },   { 4 + 19, 5 + 6 },  { 0 + 22, 7 + 4 },
+    { 2 + 19, 3 + 7 },  { 2 + 19, 7 + 3 },   { 1 + 19, 0 + 10 }, { 15 + 5, 6 + 4 },
+    { 11 + 8, 4 + 6 },  { 0 + 19, 7 + 3 },   { 9 + 9, 8 + 2 },   { 10 + 8, 4 + 6 },
+    { 8 + 9, 7 + 3 },   { 0 + 17, 6 + 4 },   { 5 + 11, 4 + 6 },  { 12 + 4, 3 + 7 },
+    { 8 + 7, 3 + 5 },   { 2 + 13, 1 + 7 },   { 13 + 2, 2 + 6 },  { 1 + 14, 4 + 4 },
+    { 0 + 15, 6 + 2 },  { 5 + 10, 5 + 3 },   { 4 + 11, 0 + 8 },  { 6 + 9, 3 + 5 },
+    { 5 + 9, 4 + 4 },   { 5 + 9, 4 + 4 },    { 12 + 2, 3 + 5 },  { 5 + 9, 2 + 6 },
+    { 9 + 5, 2 + 6 },   { 1 + 13, 7 + 1 },   { 1 + 13, 3 + 5 },  { 5 + 9, 4 + 4 },
+    { 0 + 13, 1 + 7 },  { 12 + 1, 5 + 3 },   { 1 + 12, 7 + 1 },  { 2 + 11, 4 + 4 },
+    { 1 + 12, 6 + 2 },  { 3 + 10, 3 + 5 },   { 6 + 7, 2 + 6 },   { 9 + 4, 6 + 2 },
+    { 7 + 5, 2 + 6 },   { 11 + 1, 0 + 8 },   { 6 + 6, 5 + 3 },   { 3 + 9, 0 + 8 },
+    { 4 + 8, 2 + 6 },   { 4 + 8, 7 + 1 },    { 10 + 2, 1 + 7 },  { 4 + 8, 6 + 2 },
+    { 4 + 7, 2 + 6 },   { 4 + 7, 7 + 1 },    { 9 + 2, 6 + 2 },   { 8 + 3, 0 + 8 },
+    { 7 + 4, 6 + 2 },   { 5 + 6, 3 + 5 },    { 9 + 2, 3 + 5 },   { 8 + 3, 0 + 8 },
+    { 3 + 7, 5 + 3 },   { 7 + 3, 4 + 4 },    { 9 + 1, 4 + 4 },   { 8 + 2, 3 + 5 },
+    { 3 + 7, 5 + 3 },   { 9 + 1, 6 + 2 },    { 7 + 3, 0 + 8 },   { 7 + 3, 2 + 6 },
+    { 6 + 3, 6 + 1 },   { 3 + 6, 1 + 6 },    { 7 + 2, 6 + 1 },   { 8 + 1, 3 + 4 },
+    { 4 + 5, 5 + 2 },   { 7 + 2, 1 + 6 },    { 2 + 7, 3 + 4 },   { 7 + 2, 1 + 6 },
+    { 7 + 2, 0 + 7 },   { 7 + 2, 5 + 2 },    { 8 + 1, 0 + 7 },   { 4 + 5, 3 + 4 },
+    { 0 + 9, 1 + 6 },   { 0 + 9, 4 + 3 },    { 4 + 5, 2 + 5 },   { 8 + 1, 5 + 2 },
+    { 5 + 3, 0 + 7 },   { 6 + 2, 1 + 6 },    { 6 + 2, 6 + 1 },   { 4 + 4, 1 + 6 },
+    { 0 + 8, 6 + 1 },   { 2 + 6, 1 + 6 },    { 2 + 6, 3 + 4 },   { 3 + 5, 6 + 1 },
+    { 2 + 6, 2 + 5 },   { 3 + 5, 6 + 1 },    { 2 + 6, 6 + 1 },   { 6 + 2, 4 + 3 },
+    { 3 + 5, 0 + 7 },   { 0 + 8, 0 + 7 },    { 6 + 2, 3 + 4 },   { 3 + 5, 1 + 6 },
+};
+
+// Decode macroblock_address_increment
+UMC::Status MPEG2HeadersBitstream::DecodeMBAddress(MPEG2SliceHeader_ * sliceHdr)
+{
+    uint32_t macroblock_address_increment = 0;
+    uint32_t cc;
+
+    for (;;)
+    {
+        cc = GetBits(11);
+        UngetBits(11);
+
+        if (cc >= 24)
+            break;
+
+        if (cc != 15)    // if not macroblock_stuffing
+        {
+            if (cc != 8) // if not macroblock_escape
+            {
+                sliceHdr->m_macroblock_address_increment = 1;
+                return UMC::UMC_OK;
+            }
+
+            macroblock_address_increment += 33;
+        }
+
+        cc = GetBits(11);
+    }
+
+    if (cc >= 1024)
+    {
+        cc = GetBits(1);
+        sliceHdr->m_macroblock_address_increment = macroblock_address_increment + 1;
+        return UMC::UMC_OK;
+    }
+
+    uint32_t cc1;
+    uint32_t length;
+
+    if (cc >= 128)
+    {
+        cc >>= 6;
+        length = MBAddrIncrTabB1_1[cc].length;
+        cc1 = GetBits(length);
+        sliceHdr->m_macroblock_address_increment = macroblock_address_increment + MBAddrIncrTabB1_1[cc].value;
+        return UMC::UMC_OK;
+    }
+
+    cc -= 24;
+    length = MBAddrIncrTabB1_2[cc].length;
+    cc1 = GetBits(length);
+    sliceHdr->m_macroblock_address_increment = macroblock_address_increment + MBAddrIncrTabB1_2[cc].value;
     return UMC::UMC_OK;
 }
 
@@ -2246,6 +2348,13 @@ UMC::Status MPEG2HeadersBitstream::GetSliceHeaderFull(MPEG2Slice *rpcSlice, cons
         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
 
     UMC::Status sts = GetSliceHeader(rpcSlice->GetSliceHeader_(), seq, seqExt);
+    if (UMC::UMC_OK != sts)
+        return sts;
+
+    rpcSlice->m_SliceHeader_.m_HeaderBitstreamOffset = (uint32_t)BytesDecoded();
+    rpcSlice->m_SliceHeader_.m_MbOffset = (uint32_t)BitsDecoded();
+
+    sts = DecodeMBAddress(rpcSlice->GetSliceHeader_());
     if (UMC::UMC_OK != sts)
         return sts;
 

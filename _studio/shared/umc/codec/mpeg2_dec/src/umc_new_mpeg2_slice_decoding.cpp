@@ -118,9 +118,6 @@ bool MPEG2Slice::Reset(PocDecoding * pocDecoding)
     if (m_source.GetDataSize() && false == DecodeSliceHeader())
         return false;
 
-    m_SliceHeader_.m_HeaderBitstreamOffset = (uint32_t)m_BitStream.BytesDecoded();
-    m_SliceHeader_.m_MbOffset = (uint32_t)m_BitStream.BitsDecoded();
-
     m_SliceHeader_.m_SequenceParam      = m_pSequenceParam;
     m_SliceHeader_.m_SequenceParamExt   = m_pSequenceParamExt;
     //m_SliceHeader_.m_SequenceDisplayExt =
@@ -151,7 +148,7 @@ void MPEG2Slice::SetSliceNumber(int32_t iSliceNumber)
 
 } // void MPEG2Slice::SetSliceNumber(int32_t iSliceNumber)
 
-// Decoder slice header and calculate POC
+// Decoder slice header
 bool MPEG2Slice::DecodeSliceHeader()
 {
     UMC::Status umcRes = UMC::UMC_OK;
@@ -172,7 +169,6 @@ bool MPEG2Slice::DecodeSliceHeader()
             return false;
 */
         umcRes = m_BitStream.GetSliceHeaderFull(this, m_pSequenceParam, m_pSequenceParam->GetSeqExt());
-
     }
     catch(...)
     {

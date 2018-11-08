@@ -215,10 +215,12 @@ public:
     // Read N bits from bitstream array
     inline uint32_t GetBits(uint32_t nbits);
 
+    // Return bitstream position pointers N bits back
+    inline void UngetBits(uint32_t nbits);
+
     // Read N bits from bitstream array
     template <uint32_t nbits>
     inline uint32_t GetPredefinedBits();
-
 
     // Read variable length coded unsigned element
     uint32_t GetVLCElementU();
@@ -318,6 +320,8 @@ public:
     // Parse slice header part which contains PPS ID
     UMC::Status GetSliceHeaderPart1(MPEG2SliceHeader * sliceHdr);
     UMC::Status GetSliceHeader(MPEG2SliceHeader_ * sliceHdr, const MPEG2SequenceHeader *, const MPEG2SequenceExtension *);
+    // Decode macroblock_address_increment (MBA)
+    UMC::Status DecodeMBAddress(MPEG2SliceHeader_ * sliceHdr);
     // Parse full slice header
     UMC::Status GetSliceHeaderFull(MPEG2Slice *, const MPEG2SequenceHeader *, const MPEG2SequenceExtension *);
 
@@ -399,6 +403,13 @@ uint32_t MPEG2BaseBitstream::GetBits(const uint32_t nbits)
 
     GetNBits(m_pbs, m_bitOffset, n, w);
     return(w);
+}
+
+// Read N bits from bitstream array
+inline
+void MPEG2BaseBitstream::UngetBits(const uint32_t nbits)
+{
+    UngetNBits(m_pbs, m_bitOffset, nbits);
 }
 
 // Read N bits from bitstream array

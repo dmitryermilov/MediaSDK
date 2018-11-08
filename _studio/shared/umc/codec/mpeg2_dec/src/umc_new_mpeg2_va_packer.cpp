@@ -249,7 +249,7 @@ bool PackerVA::PackSliceParams(MPEG2Slice *pSlice, uint32_t &sliceNum, bool isLa
         return true;
 
     sliceParams->macroblock_offset = sliceHeader->m_MbOffset + sizeof(start_code_prefix) * 8;
-    sliceParams->slice_horizontal_position = 0;
+    sliceParams->slice_horizontal_position = sliceHeader->m_macroblock_address_increment - 1;
     sliceParams->slice_vertical_position = sliceHeader->slice_vertical_position - 1;
     sliceParams->quantiser_scale_code = sliceHeader->quantiser_scale_code;
     sliceParams->intra_slice_flag = sliceHeader->intra_slice_flag;
