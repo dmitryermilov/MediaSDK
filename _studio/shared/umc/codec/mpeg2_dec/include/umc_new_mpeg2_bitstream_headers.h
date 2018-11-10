@@ -315,8 +315,6 @@ public:
     // Parse SEI message
     int32_t ParseSEI(const HeaderSet<MPEG2SeqParamSet> & sps, int32_t current_sps, MPEG2SEIPayLoad *spl);
 
-    // Parse remaining of slice header after GetSliceHeaderPart1
-    void decodeSlice(MPEG2Slice *, const MPEG2SeqParamSet *, const MPEG2PicParamSet *);
     // Parse slice header part which contains PPS ID
     UMC::Status GetSliceHeaderPart1(MPEG2SliceHeader * sliceHdr);
     UMC::Status GetSliceHeader(MPEG2SliceHeader_ * sliceHdr, const MPEG2SequenceHeader *, const MPEG2SequenceExtension *);
@@ -324,11 +322,6 @@ public:
     UMC::Status DecodeMBAddress(MPEG2SliceHeader_ * sliceHdr);
     // Parse full slice header
     UMC::Status GetSliceHeaderFull(MPEG2Slice *, const MPEG2SequenceHeader *, const MPEG2SequenceExtension *);
-
-    // Parse scaling list information in SPS or PPS
-    void parseScalingList(MPEG2ScalingList *);
-    // Reserved for future header extensions
-    bool MoreRbspData();
 
 /*********************************MPEG2******************************************/
     // Parse sequence header
@@ -349,38 +342,8 @@ public:
     // Parse quant matrix extension
     void GetQuantMatrix(MPEG2QuantMatrix *q);
 /*********************************MPEG2******************************************/
-    // Part VPS header
-    UMC::Status GetVideoParamSet(MPEG2VideoParamSet *vps);
-
-    // Parse SPS header
-    UMC::Status GetSequenceParamSet(MPEG2SeqParamSet *sps);
-
-    // Parse PPS header
-    void GetPictureParamSetPart1(MPEG2PicParamSet *pps);
-    UMC::Status GetPictureParamSetFull(MPEG2PicParamSet  *pps, MPEG2SeqParamSet const*);
-    UMC::Status GetWPPTileInfo(MPEG2SliceHeader *hdr,
-                            const MPEG2PicParamSet *pps,
-                            const MPEG2SeqParamSet *sps);
-
-    void parseShortTermRefPicSet(const MPEG2SeqParamSet* sps, ReferencePictureSet* pRPS, uint32_t idx);
 
 protected:
-
-    // Parse video usability information block in SPS
-    void parseVUI(MPEG2SeqParamSet *sps);
-
-    // Parse weighted prediction table in slice header
-    void xParsePredWeightTable(const MPEG2SeqParamSet *sps, MPEG2SliceHeader * sliceHdr);
-    // Parse scaling list data block
-    void xDecodeScalingList(MPEG2ScalingList *scalingList, unsigned sizeId, unsigned listId);
-    // Parse HRD information in VPS or in VUI block of SPS
-    void parseHrdParameters(MPEG2HRD *hrd, uint8_t commonInfPresentFlag, uint32_t vps_max_sub_layers);
-
-    // Parse profile tier layers header part in VPS or SPS
-    void  parsePTL(MPEG2ProfileTierLevel *rpcPTL, int maxNumSubLayersMinus1);
-    // Parse one profile tier layer
-    void  parseProfileTier(MPEG2PTL *ptl);
-
     // Decoding SEI message functions
     int32_t sei_message(const HeaderSet<MPEG2SeqParamSet> & sps,int32_t current_sps,MPEG2SEIPayLoad *spl);
     // Parse SEI payload data

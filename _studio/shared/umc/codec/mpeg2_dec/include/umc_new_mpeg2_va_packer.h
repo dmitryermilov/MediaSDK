@@ -26,11 +26,6 @@
 
 #include "umc_va_base.h"
 
-
-#include <va/va_dec_hevc.h>
-
-#include "umc_new_mpeg2_tables.h"
-
 namespace UMC_MPEG2_DECODER
 {
 
@@ -42,105 +37,6 @@ enum
     INTERVIEW_TERM_REFERENCE = 3
 };
 
-extern int const s_quantTSDefault4x4[16];
-extern int const s_quantIntraDefault8x8[64];
-extern int const s_quantInterDefault8x8[64];
-extern uint16_t const* SL_tab_up_right[];
-
-inline
-int const* getDefaultScalingList(unsigned sizeId, unsigned listId)
-{
-    const int *src = 0;
-    switch (sizeId)
-    {
-    case SCALING_LIST_4x4:
-        src = (int*)g_quantTSDefault4x4;
-        break;
-    case SCALING_LIST_8x8:
-        src = (listId < 3) ? s_quantIntraDefault8x8 : s_quantInterDefault8x8;
-        break;
-    case SCALING_LIST_16x16:
-        src = (listId < 3) ? s_quantIntraDefault8x8 : s_quantInterDefault8x8;
-        break;
-    case SCALING_LIST_32x32:
-        src = (listId < 1) ? s_quantIntraDefault8x8 : s_quantInterDefault8x8;
-        break;
-    default:
-        VM_ASSERT(0);
-        src = NULL;
-        break;
-    }
-
-    return src;
-}
-
-template <int COUNT>
-inline
-void initQMatrix(const MPEG2ScalingList *scalingList, int sizeId, unsigned char qm[6][COUNT], bool force_upright_scan = false)
-{
-    /*        n*m    listId
-        --------------------
-        Intra   Y       0
-        Intra   Cb      1
-        Intra   Cr      2
-        Inter   Y       3
-        Inter   Cb      4
-        Inter   Cr      5         */
-
-    uint16_t const* scan = 0;
-    if (force_upright_scan)
-        scan = SL_tab_up_right[sizeId];
-
-    for (int n = 0; n < 6; n++)
-    {
-        const int *src = scalingList->getScalingListAddress(sizeId, n);
-        for (int i = 0; i < COUNT; i++)  // coef.
-        {
-            int const idx = scan ? scan[i] : i;
-            qm[n][i] = (unsigned char)src[idx];
-        }
-    }
-}
-
-template<int COUNT>
-inline
-void initQMatrix(const MPEG2ScalingList *scalingList, int sizeId, unsigned char qm[3][2][COUNT])
-{
-    for(int comp=0 ; comp <= 2 ; comp++)    // Y Cb Cr
-    {
-        for(int n=0; n <= 1;n++)
-        {
-            int listId = comp + 3*n;
-            const int *src = scalingList->getScalingListAddress(sizeId, listId);
-            for(int i=0;i < COUNT;i++)  // coef.
-                qm[comp][n][i] = (unsigned char)src[i];
-        }
-    }
-}
-
-inline
-void initQMatrix(const MPEG2ScalingList *scalingList, int sizeId, unsigned char qm[2][64], bool force_upright_scan = false)
-{
-    /*      n      m     listId
-        --------------------
-        Intra   Y       0
-        Inter   Y       1         */
-
-    uint16_t const* scan = 0;
-    if (force_upright_scan)
-        scan = SL_tab_up_right[sizeId];
-
-    for(int n=0;n < 2;n++)  // Intra, Inter
-    {
-        const int *src = scalingList->getScalingListAddress(sizeId, n);
-
-        for (int i = 0; i < 64; i++)  // coef.
-        {
-            int const idx = scan ? scan[i] : i;
-            qm[n][i] = (unsigned char)src[idx];
-        }
-    }
-}
 
 class MPEG2DecoderFrame;
 class MPEG2DecoderFrameInfo;

@@ -46,7 +46,6 @@ MPEG2DecoderFrame::MPEG2DecoderFrame(UMC::MemoryAllocator *pMemoryAllocator, Hea
 {
     m_isShortTermRef = false;
     m_isLongTermRef = false;
-    m_RefPicListResetCount = 0;
     m_PicOrderCnt = 0;
 
     // set memory managment tools
@@ -138,7 +137,6 @@ void MPEG2DecoderFrame::Reset()
 
     post_procces_complete = false;
 
-    m_RefPicListResetCount = 0;
     m_PicOrderCnt = 0;
 
     m_Flags.isFull = 0;

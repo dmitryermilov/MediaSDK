@@ -303,60 +303,6 @@ private:
     UMC::Mutex m_mGuard;
 };
 
-//*********************************************************************************************/
-// Memory buffer for storing decoded coefficients
-//*********************************************************************************************/
-class CoeffsBuffer : public HeapObject
-{
-public:
-    // Default constructor
-    CoeffsBuffer(void);
-    // Destructor
-    virtual ~CoeffsBuffer(void);
-
-    // Initialize buffer
-    UMC::Status Init(int32_t numberOfItems, int32_t sizeOfItem);
-
-    bool IsInputAvailable() const;
-    // Lock input buffer
-    uint8_t* LockInputBuffer();
-    // Unlock input buffer
-    bool UnLockInputBuffer(size_t size);
-
-    bool IsOutputAvailable() const;
-    // Lock output buffer
-    bool LockOutputBuffer(uint8_t *& pointer, size_t &size);
-    // Unlock output buffer
-    bool UnLockOutputBuffer();
-    // Release object
-    void Close(void);
-    // Reset object
-    virtual void Reset(void);
-
-    virtual void Free();
-
-protected:
-    uint8_t *m_pbAllocatedBuffer;       // (uint8_t *) pointer to allocated unaligned buffer
-    size_t m_lAllocatedBufferSize;    // (int32_t) size of allocated buffer
-
-    uint8_t *m_pbBuffer;                // (uint8_t *) pointer to allocated buffer
-    size_t m_lBufferSize;             // (int32_t) size of using buffer
-
-    uint8_t *m_pbFree;                  // (uint8_t *) pointer to free space
-    size_t m_lFreeSize;               // (int32_t) size of free space
-
-    size_t m_lItemSize;               // (int32_t) size of output data portion
-
-    struct BufferInfo
-    {
-        uint8_t * m_pPointer;
-        size_t  m_Size;
-        BufferInfo *m_pNext;
-    };
-
-    BufferInfo *m_pBuffers;           // (Buffer *) queue of filled sample info
-};
-
 } // namespace UMC_MPEG2_DECODER
 
 #endif // __UMC_H265_HEAP_H

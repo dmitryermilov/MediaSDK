@@ -27,54 +27,12 @@
 #include "umc_new_mpeg2_task_supplier.h"
 #endif
 
-#include "umc_new_mpeg2_tables.h"
 #include "mfx_ext_buffers.h"
 
 using namespace UMC;
 
 namespace UMC_MPEG2_DECODER
 {
-    int const s_quantTSDefault4x4[16] =
-    {
-      16,16,16,16,
-      16,16,16,16,
-      16,16,16,16,
-      16,16,16,16
-    };
-
-    int const s_quantIntraDefault8x8[64] =
-    {
-      16,16,16,16,17,18,21,24,  // 10 10 10 10 11 12 15 18
-      16,16,16,16,17,19,22,25,
-      16,16,17,18,20,22,25,29,
-      16,16,18,21,24,27,31,36,
-      17,17,20,24,30,35,41,47,
-      18,19,22,27,35,44,54,65,
-      21,22,25,31,41,54,70,88,
-      24,25,29,36,47,65,88,115
-    };
-
-    int const s_quantInterDefault8x8[64] =
-    {
-      16,16,16,16,17,18,20,24,
-      16,16,16,17,18,20,24,25,
-      16,16,17,18,20,24,25,28,
-      16,17,18,20,24,25,28,33,
-      17,18,20,24,25,28,33,41,
-      18,20,24,25,28,33,41,54,
-      20,24,25,28,33,41,54,71,
-      24,25,28,33,41,54,71,91
-    };
-
-    //the tables used to restore original scan order of scaling lists (req. by drivers since ci-main-49045)
-    uint16_t const* SL_tab_up_right[] =
-    {
-        ScanTableDiag4x4,
-        g_sigLastScanCG32x32,
-        g_sigLastScanCG32x32,
-        g_sigLastScanCG32x32
-    };
-
 
 Packer * Packer::CreatePacker(UMC::VideoAccelerator * va)
 {

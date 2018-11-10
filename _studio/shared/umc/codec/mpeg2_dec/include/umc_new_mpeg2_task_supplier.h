@@ -182,8 +182,6 @@ private:
 
     size_t m_offset;
     int32_t m_lastUsed;
-
-    //std::list<> ;
 };
 
 /****************************************************************************************************/
@@ -363,11 +361,6 @@ public:
 
     Headers * GetHeaders() { return &m_Headers;}
 
-    inline const MPEG2SeqParamSet *GetCurrentSequence(void) const
-    {
-        return m_Headers.m_SeqParams.GetCurrentHeader();
-    }
-
     // Decode slice header start, set slice links to SPS and PPS and correct tile offsets table if needed
     virtual MPEG2Slice * DecodeSliceHeader(UMC::MediaDataEx *nalUnit);
 
@@ -380,16 +373,6 @@ protected:
 
     // Include a new slice into a set of frame slices
     void AddSliceToFrame(MPEG2DecoderFrame *pFrame, MPEG2Slice *pSlice);
-
-    // Initialize scaling list data if needed
-    void ActivateHeaders(MPEG2SeqParamSet *sps, MPEG2PicParamSet *pps);
-
-    // Check whether this slice should be skipped because of random access conditions. MPEG2 spec 3.111
-    bool IsSkipForCRAorBLA(const MPEG2Slice *pSlice);
-
-    // Calculate NoRaslOutputFlag flag for specified slice
-    void CheckCRAOrBLA(const MPEG2Slice *pSlice);
-
     // Try to find a reusable frame or allocate a new one and initialize it with slice parameters
     virtual MPEG2DecoderFrame *AllocateNewFrame(const MPEG2Slice *pSlice);
     // Initialize just allocated frame with slice parameters
@@ -406,10 +389,6 @@ protected:
 
     // Update DPB contents marking frames for reuse
     void DPBUpdate(const MPEG2Slice * slice);
-
-    // Not implemented
-    virtual void AddFakeReferenceFrame(MPEG2Slice*);
-    virtual MPEG2DecoderFrame* AddSelfReferenceFrame(MPEG2Slice*);
 
     // Find NAL units in new bitstream buffer and process them
     virtual UMC::Status AddOneFrame(UMC::MediaData * pSource);
@@ -434,9 +413,6 @@ protected:
     // Sets forward and backward references
     virtual void SetReferences(MPEG2DecoderFrame * pFrame);
 
-    // Try to reset in case DPB has overflown
-    void PreventDPBFullness();
-
     MPEG2SegmentDecoderBase **m_pSegmentDecoder;
     uint32_t m_iThreadNum;
 
@@ -444,7 +420,6 @@ protected:
     double      m_local_delta_frame_time;
     bool        m_use_external_framerate;
     bool        m_decodedOrder;
-    bool        m_checkCRAInsideResetProcess;
 
     MPEG2Slice * m_pLastSlice;
 
@@ -492,13 +467,6 @@ private:
     UMC::Status xDecodePictureHeaderExt(MPEG2HeadersBitstream *);
     // Decode quant matrix extension
     UMC::Status xDecodeQuantMatrix(MPEG2HeadersBitstream *);
-
-    // Decode video parameters set NAL unit
-    UMC::Status xDecodeVPS(MPEG2HeadersBitstream *);
-    // Decode sequence parameters set NAL unit
-    UMC::Status xDecodeSPS(MPEG2HeadersBitstream *);
-    // Decode picture parameters set NAL unit
-    UMC::Status xDecodePPS(MPEG2HeadersBitstream *);
 
     TaskSupplier_MPEG2 & operator = (TaskSupplier_MPEG2 &)
     {

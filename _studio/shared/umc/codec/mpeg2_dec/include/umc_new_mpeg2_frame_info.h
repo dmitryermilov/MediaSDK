@@ -79,17 +79,6 @@ public:
         m_SliceCount++;
 
         const MPEG2SliceHeader &sliceHeader = *(pSlice->GetSliceHeader());
-
-        m_hasTiles = false;
-
-        m_WA_different_disable_deblocking = m_WA_different_disable_deblocking || (sliceHeader.slice_deblocking_filter_disabled_flag != m_pSliceQueue[0]->GetSliceHeader()->slice_deblocking_filter_disabled_flag);
-/*
-        if (!m_sps)
-        {
-            m_sps = (MPEG2SeqParamSet *)pSlice->GetSeqParam();
-            m_sps->IncrementReference();
-        }
-*/
     }
 
     uint32_t GetSliceCount() const
@@ -143,16 +132,6 @@ public:
     void Free();
     void RemoveSlice(int32_t num);
 
-    bool IsNeedDeblocking() const
-    {
-        return m_isNeedDeblocking;
-    }
-
-    bool IsNeedSAO() const
-    {
-        return m_isNeedSAO;
-    }
-
     bool IsCompleted() const;
 
     bool IsIntraAU() const
@@ -165,25 +144,6 @@ public:
         return m_pFrame->m_isUsedAsReference;
     }
 
-    bool HasDependentSliceSegments() const
-    {
-        return m_hasDependentSliceSegments;
-    }
-
-    bool IsNeedWorkAroundForDeblocking() const
-    {
-        return m_WA_different_disable_deblocking;
-    }
-
-    // Initialize tiles and slices threading information
-    void FillTileInfo();
-
-    // reorder slices and set maxCUAddr
-    void EliminateASO();
-
-    // Remove corrupted slices
-    void EliminateErrors();
-
     MPEG2DecoderFrameInfo * GetNextAU() const {return m_nextAU;}
     MPEG2DecoderFrameInfo * GetPrevAU() const {return m_prevAU;}
     MPEG2DecoderFrameInfo * GetRefAU() const {return m_refAU;}
@@ -191,9 +151,6 @@ public:
     void SetNextAU(MPEG2DecoderFrameInfo *au) {m_nextAU = au;}
     void SetPrevAU(MPEG2DecoderFrameInfo *au) {m_prevAU = au;}
     void SetRefAU(MPEG2DecoderFrameInfo *au) {m_refAU = au;}
-
-
-    bool   m_hasTiles;
 
     MPEG2DecoderFrame * m_pFrame;
     int32_t m_prepared;
@@ -209,13 +166,8 @@ private:
     int32_t m_SliceCount;
 
     Heap_Objects * m_pObjHeap;
-    bool m_isNeedDeblocking;
-    bool m_isNeedSAO;
 
     bool m_isIntraAU;
-    bool m_hasDependentSliceSegments;
-
-    bool m_WA_different_disable_deblocking;
 
     MPEG2DecoderFrameInfo *m_nextAU;
     MPEG2DecoderFrameInfo *m_prevAU;

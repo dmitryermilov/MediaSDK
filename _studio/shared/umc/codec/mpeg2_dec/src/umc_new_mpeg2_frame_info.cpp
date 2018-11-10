@@ -27,7 +27,6 @@
 namespace UMC_MPEG2_DECODER
 {
 
-
 bool MPEG2DecoderFrameInfo::IsCompleted() const
 {
     if (GetStatus() == MPEG2DecoderFrameInfo::STATUS_COMPLETED)
@@ -40,15 +39,7 @@ void MPEG2DecoderFrameInfo::Reset()
 {
     Free();
 
-    m_hasTiles = false;
-
-
-    m_isNeedDeblocking = false;
-    m_isNeedSAO = false;
-
     m_isIntraAU = true;
-    m_hasDependentSliceSegments = false;
-    m_WA_different_disable_deblocking = false;
 
     m_nextAU = 0;
     m_prevAU = 0;
@@ -97,128 +88,6 @@ void MPEG2DecoderFrameInfo::RemoveSlice(int32_t num)
     m_pSliceQueue[m_SliceCount] = pCurSlice;
 }
 
-// Function works with a list of slices sorted by slice_segment_address
-void MPEG2DecoderFrameInfo::EliminateErrors()
-{
-    if (!GetSlice(0))
-        return;
-
-    // Remove dependent slices without a corresponding independent slice
-    for (uint32_t sliceId = 0; sliceId < GetSliceCount(); sliceId++)
-    {
-        MPEG2Slice * slice = GetSlice(sliceId);
-
-        if (slice->GetSliceHeader()->dependent_slice_segment_flag)
-        {
-            RemoveSlice(sliceId);
-            sliceId = uint32_t(-1);
-            continue;
-        }
-        else
-            break;
-    }
-
-    {
-        // MPEG2 7.4.7.1 General slice segment header semantics
-        MPEG2Slice *baseSlice = GetSlice(0); // after the for() loop above ,the first slice is treated as 'base' slice
-
-        bool bIndepSliceMissing = false;
-        for (uint32_t sliceId = 1; sliceId < GetSliceCount(); sliceId++)
-        {
-            MPEG2SliceHeader *sliceHeader = GetSlice(sliceId)->GetSliceHeader();
-
-            if (!sliceHeader->dependent_slice_segment_flag)
-                bIndepSliceMissing = false;
-
-            bool bSpecViolation = sliceHeader->slice_temporal_mvp_enabled_flag !=
-                  baseSlice->GetSliceHeader()->slice_temporal_mvp_enabled_flag;
-
-            bool bRemoveDependent = bIndepSliceMissing && sliceHeader->dependent_slice_segment_flag;
-
-            if (bSpecViolation || bRemoveDependent)
-            {
-                RemoveSlice(sliceId);
-                sliceId--;
-                if (false == bIndepSliceMissing)
-                    bIndepSliceMissing = !sliceHeader->dependent_slice_segment_flag;
-            }
-        }
-    }
-
-    // Remove slices with duplicated slice_segment_address syntax
-    for (uint32_t sliceId = 0; sliceId < GetSliceCount(); sliceId++)
-    {
-        MPEG2Slice * slice = GetSlice(sliceId);
-        MPEG2Slice * nextSlice = GetSlice(sliceId + 1);
-
-        if (!nextSlice)
-            break;
-
-        if (slice->GetFirstMB() == slice->GetMaxMB())
-        {
-            uint32_t sliceIdToRemove;
-
-            // Heuristic logic:
-            if (slice->GetSliceHeader()->dependent_slice_segment_flag && !nextSlice->GetSliceHeader()->dependent_slice_segment_flag)
-            {
-                // dependent slices are prone to errors
-                sliceIdToRemove = sliceId;
-            }
-            else
-            {
-                // among two independent or dependent slices, prefer to keep the first slice
-                sliceIdToRemove = sliceId + 1;
-            }
-            RemoveSlice(sliceIdToRemove);
-            sliceId = uint32_t(-1);
-            continue;
-        }
-    }
-}
-
-void MPEG2DecoderFrameInfo::EliminateASO()
-{
-    static int32_t MAX_MB_NUMBER = 0x7fffffff;
-
-    if (!GetSlice(0))
-        return;
-
-    uint32_t count = GetSliceCount();
-    for (uint32_t sliceId = 0; sliceId < count; sliceId++)
-    {
-        MPEG2Slice * curSlice = GetSlice(sliceId);
-        int32_t minFirst = MAX_MB_NUMBER;
-        uint32_t minSlice = 0;
-
-        for (uint32_t j = sliceId; j < count; j++)
-        {
-            MPEG2Slice * slice = GetSlice(j);
-            if (slice->GetFirstMB() < curSlice->GetFirstMB() && minFirst > slice->GetFirstMB())
-            {
-                minFirst = slice->GetFirstMB();
-                minSlice = j;
-            }
-        }
-
-        if (minFirst != MAX_MB_NUMBER)
-        {
-            MPEG2Slice * temp = m_pSliceQueue[sliceId];
-            m_pSliceQueue[sliceId] = m_pSliceQueue[minSlice];
-            m_pSliceQueue[minSlice] = temp;
-        }
-    }
-
-    for (uint32_t sliceId = 0; sliceId < count; sliceId++)
-    {
-        MPEG2Slice * slice = GetSlice(sliceId);
-        MPEG2Slice * nextSlice = GetSlice(sliceId + 1);
-
-        if (!nextSlice)
-            break;
-
-        slice->SetMaxMB(nextSlice->GetFirstMB());
-    }
-}
 
 } // namespace UMC_MPEG2_DECODER
 #endif // UMC_ENABLE_MPEG2_VIDEO_DECODER

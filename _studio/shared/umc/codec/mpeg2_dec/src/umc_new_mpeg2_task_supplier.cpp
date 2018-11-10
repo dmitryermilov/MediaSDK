@@ -92,104 +92,6 @@ uint32_t DecReferencePictureMarking_MPEG2::GetDPBError() const
     return m_isDPBErrorFound;
 }
 
-// Update DPB contents marking frames for reuse
-UMC::Status DecReferencePictureMarking_MPEG2::UpdateRefPicMarking(ViewItem_MPEG2 &view, const MPEG2Slice * pSlice)
-{
-    UMC::Status umcRes = UMC::UMC_OK;
-
-    m_frameCount++;
-
-    MPEG2SliceHeader const * sliceHeader = pSlice->GetSliceHeader();
-
-    if (sliceHeader->IdrPicFlag)
-    {
-        // mark all reference pictures as unused
-        for (MPEG2DecoderFrame *pCurr = view.pDPB->head(); pCurr; pCurr = pCurr->future())
-        {
-            if (pCurr->isShortTermRef() || pCurr->isLongTermRef())
-            {
-                pCurr->SetisShortTermRef(false);
-                pCurr->SetisLongTermRef(false);
-            }
-        }
-    }
-    else
-    {
-        const ReferencePictureSet* rps = pSlice->getRPS();
-        // loop through all pictures in the reference picture buffer
-        for (MPEG2DecoderFrame *pTmp = view.pDPB->head(); pTmp; pTmp = pTmp->future())
-        {
-            if (pTmp->isDisposable() || (!pTmp->isShortTermRef() && !pTmp->isLongTermRef()))
-                continue;
-
-            bool isReferenced = false;
-
-            if (!pTmp->RefPicListResetCount())
-            {
-                // loop through all pictures in the Reference Picture Set
-                // to see if the picture should be kept as reference picture
-                int32_t i;
-                int32_t count = rps->getNumberOfPositivePictures() + rps->getNumberOfNegativePictures();
-                for(i = 0; i < count; i++)
-                {
-                    if (!pTmp->isLongTermRef() && pTmp->m_PicOrderCnt == pSlice->GetSliceHeader()->slice_pic_order_cnt_lsb + rps->getDeltaPOC(i))
-                    {
-                        isReferenced = true;
-                        pTmp->SetisShortTermRef(true);
-                        pTmp->SetisLongTermRef(false);
-                        pTmp->m_isUsedAsReference = true;
-                    }
-                }
-
-                count = rps->getNumberOfPictures();
-                for( ; i < count; i++)
-                {
-                    if (rps->getCheckLTMSBPresent(i))
-                    {
-                        if (pTmp->m_PicOrderCnt == rps->getPOC(i))
-                        {
-                            isReferenced = true;
-                            pTmp->SetisLongTermRef(true);
-                            pTmp->SetisShortTermRef(false);
-                            pTmp->m_isUsedAsReference = true;
-                        }
-                    }
-                    else
-                    {
-                        if ((pTmp->m_PicOrderCnt % (1 << pSlice->GetSeqParam()->log2_max_pic_order_cnt_lsb)) == rps->getPOC(i) % (1 << pSlice->GetSeqParam()->log2_max_pic_order_cnt_lsb))
-                        {
-                            isReferenced = true;
-                            pTmp->SetisLongTermRef(true);
-                            pTmp->SetisShortTermRef(false);
-                            pTmp->m_isUsedAsReference = true;
-                        }
-                    }
-                }
-            }
-
-            // mark the picture as "unused for reference" if it is not in
-            // the Reference Picture Set
-            if(pTmp->m_PicOrderCnt != pSlice->GetSliceHeader()->slice_pic_order_cnt_lsb && !isReferenced)
-            {
-                pTmp->SetisShortTermRef(false);
-                pTmp->SetisLongTermRef(false);
-                DEBUG_PRINT1((VM_STRING("Dereferencing frame with POC %d, busy = %d\n"), pTmp->m_PicOrderCnt, pTmp->GetRefCounter()));
-            }
-            // WA: To fix incorrect stream having same (as incoming slice) POC in DPB
-            // Mark a older frame having similar POCs within DPBList as unused reference frame if similar mutiple POCs are found
-            // within the DPBList. This is to prevent the DPBList from max out with unused reference frame kept as reference picture.
-            else if(pTmp->m_PicOrderCnt == pSlice->GetSliceHeader()->slice_pic_order_cnt_lsb && !isReferenced && pTmp->isShortTermRef())
-            {
-                pTmp->SetisShortTermRef(false);
-                pTmp->SetisLongTermRef(false);
-                DEBUG_PRINT1((VM_STRING("Dereferencing frame with POC %d, busy = %d\n"), pTmp->m_PicOrderCnt, pTmp->GetRefCounter()));
-            }
-        }
-    }    // not IDR picture
-
-    return umcRes;
-}
-
 // Check if bitstream resolution has changed
 static
 bool IsNeedSPSInvalidate(const MPEG2SeqParamSet *old_sps, const MPEG2SeqParamSet *new_sps)
@@ -624,7 +526,6 @@ TaskSupplier_MPEG2::TaskSupplier_MPEG2()
     , m_local_delta_frame_time(0)
     , m_use_external_framerate(false)
     , m_decodedOrder(false)
-    , m_checkCRAInsideResetProcess(false)
     , m_pLastSlice(0)
     , m_pLastDisplayed(0)
     , m_pMemoryAllocator(0)
@@ -786,7 +687,6 @@ void TaskSupplier_MPEG2::Close()
     m_frameOrder               = 0;
 
     m_decodedOrder      = false;
-    m_checkCRAInsideResetProcess = false;
     m_WaitForIDR        = true;
     m_prevSliceBroken   = false;
     m_maxUIDWhenWasDisplayed = 0;
@@ -849,7 +749,6 @@ void TaskSupplier_MPEG2::Reset()
     m_frameOrder               = 0;
 
     m_decodedOrder      = false;
-    m_checkCRAInsideResetProcess = false;
     m_WaitForIDR        = true;
     m_prevSliceBroken   = false;
     m_maxUIDWhenWasDisplayed = 0;
@@ -885,7 +784,6 @@ void TaskSupplier_MPEG2::AfterErrorRestore()
     AU_Splitter_MPEG2::Reset();
 
     m_decodedOrder      = false;
-    m_checkCRAInsideResetProcess = false;
     m_WaitForIDR        = true;
     m_prevSliceBroken   = false;
     m_maxUIDWhenWasDisplayed = 0;
@@ -1141,334 +1039,6 @@ UMC::Status TaskSupplier_MPEG2::xDecodeQuantMatrix(MPEG2HeadersBitstream *bs)
     return UMC::UMC_OK;
 }
 
-// Decode video parameters set NAL unit
-UMC::Status TaskSupplier_MPEG2::xDecodeVPS(MPEG2HeadersBitstream *bs)
-{
-    MPEG2VideoParamSet vps;
-
-    UMC::Status s = bs->GetVideoParamSet(&vps);
-    if(s == UMC::UMC_OK)
-        m_Headers.m_VideoParams.AddHeader(&vps);
-
-    return s;
-}
-
-// Decode sequence parameters set NAL unit
-UMC::Status TaskSupplier_MPEG2::xDecodeSPS(MPEG2HeadersBitstream *bs)
-{
-    MPEG2SeqParamSet sps;
-    sps.Reset();
-
-    UMC::Status s = bs->GetSequenceParamSet(&sps);
-    if(s != UMC::UMC_OK)
-        return s;
-
-    if (sps.need16bitOutput && sps.m_pcPTL.GetGeneralPTL()->profile_idc == MPEG2_PROFILE_MAIN10_REMOVE && sps.bit_depth_luma == 8 && sps.bit_depth_chroma == 8 &&
-        m_initializationParams.info.color_format == UMC::NV12)
-        sps.need16bitOutput = 0;
-
-    sps.WidthInCU = (sps.pic_width_in_luma_samples % sps.MaxCUSize) ? sps.pic_width_in_luma_samples / sps.MaxCUSize + 1 : sps.pic_width_in_luma_samples / sps.MaxCUSize;
-    sps.HeightInCU = (sps.pic_height_in_luma_samples % sps.MaxCUSize) ? sps.pic_height_in_luma_samples / sps.MaxCUSize  + 1 : sps.pic_height_in_luma_samples / sps.MaxCUSize;
-    sps.NumPartitionsInCUSize = 1 << sps.MaxCUDepth;
-    sps.NumPartitionsInCU = 1 << (sps.MaxCUDepth << 1);
-    sps.NumPartitionsInFrameWidth = sps.WidthInCU * sps.NumPartitionsInCUSize;
-
-    uint8_t newDPBsize = (uint8_t)CalculateDPBSize(sps.getPTL()->GetGeneralPTL()->profile_idc, sps.getPTL()->GetGeneralPTL()->level_idc,
-                                sps.pic_width_in_luma_samples,
-                                sps.pic_height_in_luma_samples,
-                                sps.sps_max_dec_pic_buffering[HighestTid]);
-
-    for (uint32_t i = 0; i <= HighestTid; i++)
-    {
-        if (sps.sps_max_dec_pic_buffering[i] > newDPBsize)
-            sps.sps_max_dec_pic_buffering[i] = newDPBsize;
-    }
-
-    HighestTid = sps.sps_max_sub_layers - 1;
-
-    if (!sps.getPTL()->GetGeneralPTL()->level_idc && sps.sps_max_dec_pic_buffering[HighestTid])
-    {
-        uint32_t level_idc = levelIndexArray[0];
-        for (size_t i = 0; i < sizeof(levelIndexArray)/sizeof(levelIndexArray[0]); i++)
-        {
-            level_idc = levelIndexArray[i];
-            newDPBsize = (uint8_t)CalculateDPBSize(sps.getPTL()->GetGeneralPTL()->profile_idc, level_idc,
-                                    sps.pic_width_in_luma_samples,
-                                    sps.pic_height_in_luma_samples,
-                                    sps.sps_max_dec_pic_buffering[HighestTid]);
-
-            if (newDPBsize >= sps.sps_max_dec_pic_buffering[HighestTid])
-                break;
-        }
-
-        sps.getPTL()->GetGeneralPTL()->level_idc = level_idc;
-    }
-
-    sps.sps_max_dec_pic_buffering[0] = sps.sps_max_dec_pic_buffering[HighestTid] ? sps.sps_max_dec_pic_buffering[HighestTid] : newDPBsize;
-
-    const MPEG2SeqParamSet * old_sps = m_Headers.m_SeqParams.GetCurrentHeader();
-    bool newResolution = false;
-    if (IsNeedSPSInvalidate(old_sps, &sps))
-    {
-        newResolution = true;
-    }
-
-    m_Headers.m_SeqParams.AddHeader(&sps);
-
-    m_pNALSplitter->SetSuggestedSize(CalculateSuggestedSize(&sps));
-
-    if (newResolution)
-        return UMC::UMC_NTF_NEW_RESOLUTION;
-
-    return UMC::UMC_OK;
-}
-
-// Decode picture parameters set NAL unit
-UMC::Status TaskSupplier_MPEG2::xDecodePPS(MPEG2HeadersBitstream * bs)
-{
-    MPEG2PicParamSet pps;
-    pps.Reset();
-
-    bs->GetPictureParamSetPart1(&pps);
-    MPEG2SeqParamSet *sps = m_Headers.m_SeqParams.GetHeader(pps.pps_seq_parameter_set_id);
-    if (!sps)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    UMC::Status s = bs->GetPictureParamSetFull(&pps, sps);
-    if(s != UMC::UMC_OK)
-        return s;
-
-    // additional PPS members checks:
-    int32_t QpBdOffsetY = 6 * (sps->bit_depth_luma - 8);
-    if (pps.init_qp < -QpBdOffsetY || pps.init_qp > 25 + 26)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    if (pps.cross_component_prediction_enabled_flag && sps->ChromaArrayType != CHROMA_FORMAT_444)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-//     if (pps.chroma_qp_offset_list_enabled_flag && sps->ChromaArrayType == CHROMA_FORMAT_400)
-//         throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    if (pps.diff_cu_qp_delta_depth > sps->log2_max_luma_coding_block_size - sps->log2_min_luma_coding_block_size)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    if (pps.log2_parallel_merge_level > sps->log2_max_luma_coding_block_size)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    if (pps.log2_sao_offset_scale_luma > sps->bit_depth_luma - 10)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    if (pps.log2_sao_offset_scale_chroma  > sps->bit_depth_chroma - 10)
-        throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-    //palette sanity checks
-    if (pps.pps_num_palette_predictor_initializer)
-    {
-        unsigned const PaletteMaxPredSize
-            = sps->palette_max_size + sps->delta_palette_max_predictor_size;
-        if (pps.pps_num_palette_predictor_initializer > PaletteMaxPredSize)
-            throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-        if (pps.monochrome_palette_flag != (sps->chroma_format_idc == 0))
-            throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-        if (pps.luma_bit_depth_entry != sps->bit_depth_luma)
-            throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-        if (!pps.monochrome_palette_flag && pps.chroma_bit_depth_entry != sps->bit_depth_chroma)
-            throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-    }
-
-    uint32_t WidthInLCU = sps->WidthInCU;
-    uint32_t HeightInLCU = sps->HeightInCU;
-
-    pps.m_CtbAddrRStoTS.resize(WidthInLCU * HeightInLCU + 1);
-    pps.m_CtbAddrTStoRS.resize(WidthInLCU * HeightInLCU + 1);
-    pps.m_TileIdx.resize(WidthInLCU * HeightInLCU + 1);
-
-    // Calculate tiles rows and columns coordinates
-    if (pps.tiles_enabled_flag)
-    {
-        uint32_t columns = pps.num_tile_columns;
-        uint32_t rows = pps.num_tile_rows;
-
-        if (columns > WidthInLCU)
-            throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-        if (rows > HeightInLCU)
-            throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-        if (pps.uniform_spacing_flag)
-        {
-            uint32_t lastDiv, i;
-
-            pps.column_width.resize(columns);
-            pps.row_height.resize(rows);
-
-            lastDiv = 0;
-            for (i = 0; i < columns; i++)
-            {
-                uint32_t tmp = ((i + 1) * WidthInLCU) / columns;
-                pps.column_width[i] = tmp - lastDiv;
-                lastDiv = tmp;
-            }
-
-            lastDiv = 0;
-            for (i = 0; i < rows; i++)
-            {
-                uint32_t tmp = ((i + 1) * HeightInLCU) / rows;
-                pps.row_height[i] = tmp - lastDiv;
-                lastDiv = tmp;
-            }
-        }
-        else
-        {
-            // Initialize last column/row values, all previous values were parsed from PPS header
-            uint32_t i;
-            uint32_t tmp = 0;
-
-            for (i = 0; i < pps.num_tile_columns - 1; i++)
-            {
-                uint32_t column = pps.getColumnWidth(i);
-                if (column > WidthInLCU)
-                    throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-                tmp += column;
-            }
-
-            if (tmp >= WidthInLCU)
-                throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-
-            pps.column_width[pps.num_tile_columns - 1] = WidthInLCU - tmp;
-
-            tmp = 0;
-            for (i = 0; i < pps.num_tile_rows - 1; i++)
-            {
-                uint32_t row = pps.getRowHeight(i);
-                if (row > HeightInLCU)
-                    throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-                tmp += row;
-            }
-
-            pps.row_height[pps.num_tile_rows - 1] = HeightInLCU - tmp;
-            if (tmp >= HeightInLCU)
-                throw mpeg2_exception(UMC::UMC_ERR_INVALID_STREAM);
-        }
-
-        uint32_t *colBd = mpeg2_new_array_throw<uint32_t>(columns);
-        uint32_t *rowBd = mpeg2_new_array_throw<uint32_t>(rows);
-
-        colBd[0] = 0;
-        for (uint32_t i = 0; i < pps.num_tile_columns - 1; i++)
-        {
-            colBd[i + 1] = colBd[i] + pps.getColumnWidth(i);
-        }
-
-        rowBd[0] = 0;
-        for (uint32_t i = 0; i < pps.num_tile_rows - 1; i++)
-        {
-            rowBd[i + 1] = rowBd[i] + pps.getRowHeight(i);
-        }
-
-        uint32_t tbX = 0, tbY = 0;
-
-        // Initialize CTB index raster to tile and inverse lookup tables
-        for (uint32_t i = 0; i < WidthInLCU * HeightInLCU; i++)
-        {
-            uint32_t tileX = 0, tileY = 0, CtbAddrRStoTS;
-
-            for (uint32_t j = 0; j < columns; j++)
-            {
-                if (tbX >= colBd[j])
-                {
-                    tileX = j;
-                }
-            }
-
-            for (uint32_t j = 0; j < rows; j++)
-            {
-                if (tbY >= rowBd[j])
-                {
-                    tileY = j;
-                }
-            }
-
-            CtbAddrRStoTS = WidthInLCU * rowBd[tileY] + pps.getRowHeight(tileY) * colBd[tileX];
-            CtbAddrRStoTS += (tbY - rowBd[tileY]) * pps.getColumnWidth(tileX) + tbX - colBd[tileX];
-
-            pps.m_CtbAddrRStoTS[i] = CtbAddrRStoTS;
-            pps.m_TileIdx[i] = tileY * columns + tileX;
-
-            tbX++;
-            if (tbX == WidthInLCU)
-            {
-                tbX = 0;
-                tbY++;
-            }
-        }
-
-        for (uint32_t i = 0; i < WidthInLCU * HeightInLCU; i++)
-        {
-            uint32_t CtbAddrRStoTS = pps.m_CtbAddrRStoTS[i];
-            pps.m_CtbAddrTStoRS[CtbAddrRStoTS] = i;
-        }
-
-        pps.m_CtbAddrRStoTS[WidthInLCU * HeightInLCU] = WidthInLCU * HeightInLCU;
-        pps.m_CtbAddrTStoRS[WidthInLCU * HeightInLCU] = WidthInLCU * HeightInLCU;
-        pps.m_TileIdx[WidthInLCU * HeightInLCU] = WidthInLCU * HeightInLCU;
-
-        delete[] colBd;
-        delete[] rowBd;
-    }
-    else
-    {
-        for (uint32_t i = 0; i < WidthInLCU * HeightInLCU + 1; i++)
-        {
-            pps.m_CtbAddrTStoRS[i] = i;
-            pps.m_CtbAddrRStoTS[i] = i;
-        }
-        fill(pps.m_TileIdx.begin(), pps.m_TileIdx.end(), 0);
-    }
-
-    int32_t numberOfTiles = pps.tiles_enabled_flag ? pps.getNumTiles() : 0;
-
-    pps.tilesInfo.resize(numberOfTiles);
-
-    if (!numberOfTiles)
-    {
-        pps.tilesInfo.resize(1);
-        pps.tilesInfo[0].firstCUAddr = 0;
-        pps.tilesInfo[0].endCUAddr = WidthInLCU*HeightInLCU;
-    }
-
-    // Initialize tiles coordinates
-    for (int32_t i = 0; i < numberOfTiles; i++)
-    {
-        int32_t tileY = i / pps.num_tile_columns;
-        int32_t tileX = i % pps.num_tile_columns;
-
-        int32_t startY = 0;
-        int32_t startX = 0;
-
-        for (int32_t j = 0; j < tileX; j++)
-        {
-            startX += pps.column_width[j];
-        }
-
-        for (int32_t j = 0; j < tileY; j++)
-        {
-            startY += pps.row_height[j];
-        }
-
-        pps.tilesInfo[i].endCUAddr = (startY + pps.row_height[tileY] - 1)* WidthInLCU + startX + pps.column_width[tileX] - 1;
-        pps.tilesInfo[i].firstCUAddr = startY * WidthInLCU + startX;
-        pps.tilesInfo[i].width = pps.column_width[tileX];
-    }
-
-    m_Headers.m_PicParams.AddHeader(&pps);
-
-    return s;
-}
-
 // Decode a bitstream header NAL unit
 UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
 {
@@ -1523,15 +1093,6 @@ UMC::Status TaskSupplier_MPEG2::DecodeHeaders(UMC::MediaDataEx *nalUnit)
                 break;
             }
         }
-            break;
-        case NAL_UT_VPS:
-            umcRes = xDecodeVPS(&bitStream);
-            break;
-        case NAL_UT_SPS:
-            umcRes = xDecodeSPS(&bitStream);
-            break;
-        case NAL_UT_PPS:
-            umcRes = xDecodePPS(&bitStream);
             break;
         default:
             break;
@@ -1620,12 +1181,6 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFrameToDisplayInternal(bool force)
     }
 
     return 0;
-}
-
-// Try to reset in case DPB has overflown
-void TaskSupplier_MPEG2::PreventDPBFullness()
-{
-    AfterErrorRestore();
 }
 
 // If a frame has all slices found, add it to asynchronous decode queue
@@ -1738,7 +1293,6 @@ UMC::Status TaskSupplier_MPEG2::AddSource(UMC::MediaData * pSource)
             if (GetFrameToDisplayInternal(true))
                 return UMC::UMC_ERR_NEED_FORCE_OUTPUT;
 
-            PreventDPBFullness();
             return UMC::UMC_WRN_INFO_NOT_READY;
         }
     }
@@ -1816,10 +1370,7 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
             return sts;
     }
 
-    if (m_checkCRAInsideResetProcess && !pSource)
-        return UMC::UMC_ERR_FAILED;
-
-    size_t moveToSpsOffset = m_checkCRAInsideResetProcess ? pSource->GetDataSize() : 0;
+    size_t moveToSpsOffset =  0;
 
     do
     {
@@ -1831,66 +1382,6 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
 
         for (int32_t i = 0; i < (int32_t)pMediaDataEx->count; i++, pMediaDataEx->index ++)
         {
-            if (m_checkCRAInsideResetProcess)
-            {
-                switch ((NalUnitType)pMediaDataEx->values[i])
-                {
-                case NAL_UT_CODED_SLICE_RASL_N:
-                case NAL_UT_CODED_SLICE_RADL_N:
-                case NAL_UT_CODED_SLICE_TRAIL_R:
-                case NAL_UT_CODED_SLICE_TRAIL_N:
-                case NAL_UT_CODED_SLICE_TLA_R:
-                case NAL_UT_CODED_SLICE_TSA_N:
-                case NAL_UT_CODED_SLICE_STSA_R:
-                case NAL_UT_CODED_SLICE_STSA_N:
-                case NAL_UT_CODED_SLICE_BLA_W_LP:
-                case NAL_UT_CODED_SLICE_BLA_W_RADL:
-                case NAL_UT_CODED_SLICE_BLA_N_LP:
-                case NAL_UT_CODED_SLICE_IDR_W_RADL:
-                case NAL_UT_CODED_SLICE_IDR_N_LP:
-                case NAL_UT_CODED_SLICE_CRA:
-                case NAL_UT_CODED_SLICE_RADL_R:
-                case NAL_UT_CODED_SLICE_RASL_R:
-                    {
-                        MPEG2Slice * pSlice = m_ObjHeap.AllocateObject<MPEG2Slice>();
-                        pSlice->IncrementReference();
-
-                        notifier0<MPEG2Slice> memory_leak_preventing_slice(pSlice, &MPEG2Slice::DecrementReference);
-                        nalUnit->SetDataSize(100); // is enough for retrive
-
-                        MemoryPiece memCopy;
-                        memCopy.SetData(nalUnit);
-
-                        pSlice->m_source.Allocate(nalUnit->GetDataSize() + DEFAULT_NU_TAIL_SIZE);
-
-                        notifier0<MemoryPiece> memory_leak_preventing(&pSlice->m_source, &MemoryPiece::Release);
-                        SwapperBase * swapper = m_pNALSplitter->GetSwapper();
-                        swapper->SwapMemory(&pSlice->m_source, &memCopy, 0);
-
-                        int32_t pps_pid = pSlice->RetrievePicParamSetNumber();
-                        if (pps_pid != -1)
-                            CheckCRAOrBLA(pSlice);
-
-                        m_checkCRAInsideResetProcess = false;
-                        pSource->MoveDataPointer(int32_t(pSource->GetDataSize() - moveToSpsOffset));
-                        m_pNALSplitter->Reset();
-                        return UMC::UMC_NTF_NEW_RESOLUTION;
-                    }
-                    break;
-
-                case NAL_UT_VPS:
-                case NAL_UT_SPS:
-                case NAL_UT_PPS:
-                    DecodeHeaders(nalUnit);
-                    break;
-
-                default:
-                    break;
-                };
-
-                continue;
-            }
-
             NalUnitType nut =
                 static_cast<NalUnitType>(pMediaDataEx->values[i]);
 
@@ -1945,8 +1436,6 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
                             int32_t nalIndex = pMediaDataEx->index;
                             int32_t size = pMediaDataEx->offsets[nalIndex + 1] - pMediaDataEx->offsets[nalIndex];
 
-                            m_checkCRAInsideResetProcess = true;
-
                             if (AddSlice(0, !pSource) == UMC::UMC_OK)
                             {
                                 pSource->MoveDataPointer(- size - 3);
@@ -1960,23 +1449,6 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
                     }
                 }
                 break;
-/*
-            case NAL_UT_AU_DELIMITER:
-                if (AddSlice(0, !pSource) == UMC::UMC_OK)
-                    return UMC::UMC_OK;
-                break;
-
-            case NAL_UT_EOS:
-            case NAL_UT_EOB:
-                m_WaitForIDR = true;
-                AddSlice(0, !pSource);
-                m_RA_POC = 0;
-                m_IRAPType = NAL_UT_INVALID;
-                GetView()->pDPB->IncreaseRefPicListResetCount(0); // for flushing DPB
-                NoRaslOutputFlag = 1;
-                return UMC::UMC_OK;
-                break;
-*/
             default:
                 break;
             };
@@ -1992,12 +1464,6 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
         }
 
     } while ((pSource) && (MINIMAL_DATA_SIZE_MPEG2 < pSource->GetDataSize()));
-
-    if (m_checkCRAInsideResetProcess)
-    {
-        pSource->MoveDataPointer(int32_t(pSource->GetDataSize() - moveToSpsOffset));
-        m_pNALSplitter->Reset();
-    }
 
     if (!pSource)
     {
@@ -2092,127 +1558,6 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
     pSlice->m_iNumber = m_SliceIdxInTaskSupplier;
     m_SliceIdxInTaskSupplier++;
     return pSlice;
-}
-
-// Initialize scaling list data if needed
-void TaskSupplier_MPEG2::ActivateHeaders(MPEG2SeqParamSet *sps, MPEG2PicParamSet *pps)
-{
-    for (uint32_t i = 0; i < sps->MaxCUDepth - sps->AddCUDepth; i++)
-    {
-        sps->m_AMPAcc[i] = sps->amp_enabled_flag;
-    }
-    for (uint32_t i = sps->MaxCUDepth - sps->AddCUDepth; i < sps->MaxCUDepth; i++)
-    {
-        sps->m_AMPAcc[i] = 0;
-    }
-
-    if (sps->scaling_list_enabled_flag)
-    {
-        if (pps->pps_scaling_list_data_present_flag)
-        {
-            if (!pps->getScalingList()->is_initialized())
-            {
-                pps->getScalingList()->init();
-                pps->getScalingList()->calculateDequantCoef();
-            }
-        }
-        else if (sps->sps_scaling_list_data_present_flag)
-        {
-            if (!sps->getScalingList()->is_initialized())
-            {
-                sps->getScalingList()->init();
-                sps->getScalingList()->calculateDequantCoef();
-            }
-        }
-        else
-        {
-            if (!pps->getScalingList()->is_initialized())
-            {
-                pps->getScalingList()->initFromDefaultScalingList();
-            }
-        }
-    }
-}
-
-// Calculate NoRaslOutputFlag flag for specified slice
-void TaskSupplier_MPEG2::CheckCRAOrBLA(const MPEG2Slice *pSlice)
-{
-    if (pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_IDR_W_RADL
-        || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_IDR_N_LP
-        || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_CRA
-        || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_BLA_W_LP
-        || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_BLA_W_RADL
-        || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_BLA_N_LP)
-    {
-        if (pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_BLA_W_LP
-            || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_BLA_W_RADL
-            || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_BLA_N_LP)
-            NoRaslOutputFlag = 1;
-
-        if (pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_IDR_W_RADL || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_IDR_N_LP)
-        {
-            NoRaslOutputFlag = 0;
-        }
-
-        if (pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_CRA && m_IRAPType != NAL_UT_INVALID)
-        {
-            NoRaslOutputFlag = 0;
-        }
-
-        if (NoRaslOutputFlag)
-        {
-            m_RA_POC = pSlice->m_SliceHeader.slice_pic_order_cnt_lsb;
-        }
-
-        m_IRAPType = pSlice->m_SliceHeader.nal_unit_type;
-    }
-
-    if ((pSlice->GetSliceHeader()->nal_unit_type == NAL_UT_CODED_SLICE_CRA && NoRaslOutputFlag) ||
-        pSlice->GetSliceHeader()->no_output_of_prior_pics_flag)
-    {
-        int32_t minRefPicResetCount = 0xff; // because it is possible that there is no frames with RefPicListResetCount() equals 0 (after EOS!!)
-        for (MPEG2DecoderFrame *pCurr = GetView()->pDPB->head(); pCurr; pCurr = pCurr->future())
-        {
-            if (pCurr->isDisplayable() && !pCurr->wasOutputted())
-            {
-                minRefPicResetCount = MFX_MIN(minRefPicResetCount, pCurr->RefPicListResetCount());
-            }
-        }
-
-        for (MPEG2DecoderFrame *pCurr = GetView()->pDPB->head(); pCurr; pCurr = pCurr->future())
-        {
-            if (pCurr->RefPicListResetCount() > minRefPicResetCount || pCurr->wasOutputted())
-                continue;
-
-            if (pCurr->isDisplayable())
-            {
-                DEBUG_PRINT((VM_STRING("Skip frame no_output_of_prior_pics_flag - %s\n"), GetFrameInfoString(pCurr)));
-                pCurr->m_pic_output = false;
-                pCurr->SetisDisplayable(false);
-            }
-        }
-    }
-}
-
-// Check whether this slice should be skipped because of random access conditions. MPEG2 spec 3.111
-bool TaskSupplier_MPEG2::IsSkipForCRAorBLA(const MPEG2Slice *pSlice)
-{
-    if (NoRaslOutputFlag)
-    {
-        if (pSlice->m_SliceHeader.slice_pic_order_cnt_lsb == m_RA_POC)
-            return false;
-
-        if (pSlice->m_SliceHeader.slice_pic_order_cnt_lsb < m_RA_POC &&
-            (pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_RASL_R || pSlice->m_SliceHeader.nal_unit_type == NAL_UT_CODED_SLICE_RASL_N))
-        {
-            return true;
-        }
-
-        if (pSlice->m_SliceHeader.nal_unit_type != NAL_UT_CODED_SLICE_RADL_R && pSlice->m_SliceHeader.nal_unit_type != NAL_UT_CODED_SLICE_RADL_N)
-            NoRaslOutputFlag = 0;
-    }
-
-    return false;
 }
 
 // Add a new slice to frame
@@ -2331,20 +1676,6 @@ void TaskSupplier_MPEG2::SetReferences(MPEG2DecoderFrame * pFrame)
     }
 }
 
-// Not implemented
-void TaskSupplier_MPEG2::AddFakeReferenceFrame(MPEG2Slice *)
-{
-// need to add absent ref frame logic
-}
-
-MPEG2DecoderFrame* TaskSupplier_MPEG2::AddSelfReferenceFrame(MPEG2Slice* slice)
-{
-    VM_ASSERT(slice);
-
-    return
-        slice->GetCurrentFrame();
-}
-
 // Mark frame as full with slices
 void TaskSupplier_MPEG2::OnFullFrame(MPEG2DecoderFrame * pFrame)
 {
@@ -2383,7 +1714,7 @@ void TaskSupplier_MPEG2::CompleteFrame(MPEG2DecoderFrame * pFrame)
 
     // skipping algorithm
     const MPEG2Slice *slice = slicesInfo->GetSlice(0);
-    if (!slice || IsShouldSkipFrame(pFrame) /*|| IsSkipForCRAorBLA(slice)*/)
+    if (!slice || IsShouldSkipFrame(pFrame))
     {
         slicesInfo->SetStatus(MPEG2DecoderFrameInfo::STATUS_COMPLETED);
 
@@ -2544,8 +1875,6 @@ void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG
 
     DEBUG_PRINT((VM_STRING("Init frame %s\n"), GetFrameInfoString(pFrame)));
 
-    pFrame->InitRefPicListResetCount();
-
     MarkFramesDisplayable(pFrame);
 }
 
@@ -2649,11 +1978,6 @@ void TaskSupplier_MPEG2::DPBUpdate(const MPEG2Slice * slice)
         pFrame->SetisShortTermRef(false);
         NumShortTermRefs--;
     }
-    /*
-
-    ViewItem_MPEG2 &view = *GetView();
-    DecReferencePictureMarking_MPEG2::UpdateRefPicMarking(view, slice);
-    */
 }
 
 // Find a decoder frame instance with specified surface ID
