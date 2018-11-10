@@ -59,6 +59,7 @@ MPEG2DecoderFrame::MPEG2DecoderFrame(UMC::MemoryAllocator *pMemoryAllocator, Hea
     m_Flags.isDecoded = 0;
     m_Flags.isDecodingStarted = 0;
     m_Flags.isDecodingCompleted = 0;
+
     m_isDisplayable = 0;
     m_wasOutputted = 0;
     m_wasDisplayed = 0;
@@ -143,6 +144,7 @@ void MPEG2DecoderFrame::Reset()
     m_Flags.isDecoded = 0;
     m_Flags.isDecodingStarted = 0;
     m_Flags.isDecodingCompleted = 0;
+
     m_isDisplayable = 0;
     m_wasOutputted = 0;
     m_wasDisplayed = 0;

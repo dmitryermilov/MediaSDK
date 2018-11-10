@@ -159,7 +159,7 @@ public:
         m_pFutureFrame = pFut;
     }
 
-    bool        isDisplayable()    { return m_isDisplayable != 0; }
+    bool        isDisplayable()    { return ((m_Flags.isDecodingStarted != 0) && (m_isDisplayable)); }
 
     void        SetisDisplayable(bool isDisplayable)
     {

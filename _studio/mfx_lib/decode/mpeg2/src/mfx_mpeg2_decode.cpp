@@ -515,7 +515,7 @@ mfxStatus VideoDECODEMPEG2::Init(mfxVideoParam *par)
 
         bool useBigSurfacePoolWA = MFX_Utility::IsBugSurfacePoolApplicable(type, par);
 
-            m_pH265VideoDecoder.reset(useBigSurfacePoolWA ? new VATaskSupplierBigSurfacePool<VATaskSupplier>() : new VATaskSupplier()); // HW
+        m_pH265VideoDecoder.reset(useBigSurfacePoolWA ? new VATaskSupplierBigSurfacePool<VATaskSupplier>() : new VATaskSupplier()); // HW
         m_FrameAllocator.reset(new mfx_UMC_FrameAllocator_D3D());
     }
 
@@ -667,76 +667,7 @@ mfxStatus VideoDECODEMPEG2::Init(mfxVideoParam *par)
     }
 
     return MFX_ERR_NONE;
-
-#if 0
-    MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_API, "VideoDECODEMPEG2::Init");
-    if (m_isInitialized)
-    {
-        return MFX_ERR_UNDEFINED_BEHAVIOR;
-    }
-
-    MFX_CHECK_NULL_PTR1(par);
-
-    mfxStatus mfxSts = MFX_ERR_NONE;
-
-    eMFXHWType type = MFX_HW_UNKNOWN;
-
-#if defined (MFX_VA_LINUX)
-        type = m_pCore->GetHWType();
-#endif
-
-    mfxSts = CheckVideoParamDecoders(par, m_pCore->IsExternalFrameAllocator(), type);
-
-    if (mfxSts != MFX_ERR_NONE)
-    {
-        return MFX_ERR_INVALID_VIDEO_PARAM;
-    }
-
-    mfxU16 IOPattern = par->IOPattern;
-
-#if defined (MFX_VA_LINUX)
-
-        if (!IsHWSupported(m_pCore, par))
-        {
-            return MFX_ERR_UNSUPPORTED;
-        }
-
-        if(m_isSWImpl)
-        {
-        }
-        else
-        {
-            internalImpl.reset(new VideoDECODEMPEG2Internal_HW);
-        }
-
-        if(IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY)
-            internalImpl->m_isSWBuf = true;
-#else
-        IOPattern |= MFX_IOPATTERN_IN_SYSTEM_MEMORY;
-        internalImpl.reset(new VideoDECODEMPEG2Internal_SW);
-        m_isSWImpl = true;
-#endif
-
-    mfxSts = internalImpl->Init(par, m_pCore);
-    if (mfxSts != MFX_ERR_NONE)
-        return mfxSts;
-
-    UMC::Status umcRes = internalImpl->m_implUmc->Init(&internalImpl->m_vdPar);
-    MFX_CHECK_UMC_STS(umcRes);
-
-    umcRes = internalImpl->m_implUmc->GetInfo(&internalImpl->m_vdPar);
-    MFX_CHECK_UMC_STS(umcRes);
-
-    if (MFX_PLATFORM_HARDWARE == m_pCore->GetPlatformType() && true == m_isSWImpl)
-    {
-        mfxSts = MFX_WRN_PARTIAL_ACCELERATION;
-    }
-
-    m_isInitialized = true;
-
-    return mfxSts;
-#endif
-} // mfxStatus VideoDECODEMPEG2::Init(mfxVideoParam *par)
+}
 
 mfxStatus VideoDECODEMPEG2::Reset(mfxVideoParam *par)
 {
@@ -1107,64 +1038,75 @@ mfxStatus VideoDECODEMPEG2::Query(VideoCORE *core, mfxVideoParam *in, mfxVideoPa
 
 mfxStatus VideoDECODEMPEG2::QueryIOSurf(VideoCORE *core, mfxVideoParam *par, mfxFrameAllocRequest *request)
 {
-    MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_API, "VideoDECODEMPEG2::QueryIOSurf");
     MFX_CHECK_NULL_PTR2(par, request);
 
-    if (!(par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY) &&
-        !(par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY) &&
-        !(par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY))
+    eMFXPlatform platform = core->GetPlatformType();
+
+#if defined (MFX_VA_LINUX)
+    if (platform != MFX_PLATFORM_HARDWARE)
+        return MFX_ERR_UNSUPPORTED;
+#endif
+
+    eMFXHWType type = MFX_HW_UNKNOWN;
+    if (platform == MFX_PLATFORM_HARDWARE)
     {
+        type = core->GetHWType();
+    }
+
+    mfxVideoParam params;
+    params = *par;
+    bool isNeedChangeVideoParamWarning = IsNeedChangeVideoParam(&params);
+
+    if (!(par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY) && !(par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY) && !(par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY))
         return MFX_ERR_INVALID_VIDEO_PARAM;
-    }
 
-    if ((par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY) &&
-        (par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY))
-    {
+    if ((par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY) && (par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY))
         return MFX_ERR_INVALID_VIDEO_PARAM;
-    }
 
-    if ((par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY) &&
-        (par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY))
-    {
+    if ((par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY) && (par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY))
         return MFX_ERR_INVALID_VIDEO_PARAM;
-    }
 
-    if ((par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY) &&
-        (par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY))
-    {
+    if ((par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY) && (par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY))
         return MFX_ERR_INVALID_VIDEO_PARAM;
+
+    int32_t isInternalManaging = (MFX_PLATFORM_SOFTWARE == platform) ?
+        (params.IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY) : (params.IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY);
+
+    mfxStatus sts = QueryIOSurfInternal(platform, type, &params, request);
+    if (sts != MFX_ERR_NONE)
+        return sts;
+
+    if (isInternalManaging)
+    {
+        request->NumFrameSuggested = request->NumFrameMin = (mfxU16)CalculateAsyncDepth(platform, par);
+        if (MFX_PLATFORM_SOFTWARE == platform)
+            request->Type = MFX_MEMTYPE_DXVA2_DECODER_TARGET | MFX_MEMTYPE_FROM_DECODE;
+        else
+            request->Type = MFX_MEMTYPE_SYSTEM_MEMORY | MFX_MEMTYPE_FROM_DECODE;
     }
 
-    // call internal query io surface
-    mfxStatus sts = VideoDECODEMPEG2InternalBase::QueryIOSurfInternal(core, par, request);
-    MFX_CHECK_STS(sts);
-
-    // ?? TODO: what is about opaque memory
-    if (MFX_PLATFORM_SOFTWARE == core->GetPlatformType())
+    if (par->IOPattern & MFX_IOPATTERN_OUT_OPAQUE_MEMORY)
     {
-        if ((par->IOPattern & MFX_IOPATTERN_OUT_VIDEO_MEMORY) &&
-             false == par->mfx.DecodedOrder)
-        {
-            request->NumFrameSuggested = request->NumFrameMin = 1;
-        }
+        request->Type |= MFX_MEMTYPE_OPAQUE_FRAME;
     }
-    else if (MFX_PLATFORM_HARDWARE == core->GetPlatformType())
+    else
     {
-        if (false == IsHWSupported(core, par))
-        {
-            return MFX_ERR_UNSUPPORTED;
-        }
+        request->Type |= MFX_MEMTYPE_EXTERNAL_FRAME;
+    }
 
-        if ((par->IOPattern & MFX_IOPATTERN_OUT_SYSTEM_MEMORY) &&
-             false == par->mfx.DecodedOrder)
-        {
-            request->NumFrameSuggested = request->NumFrameMin = 1 + par->AsyncDepth;
-        }
+    if (platform != core->GetPlatformType())
+    {
+        VM_ASSERT(platform == MFX_PLATFORM_SOFTWARE);
+        return MFX_WRN_PARTIAL_ACCELERATION;
+    }
+
+    if (isNeedChangeVideoParamWarning)
+    {
+        return MFX_WRN_INCOMPATIBLE_VIDEO_PARAM;
     }
 
     return MFX_ERR_NONE;
-
-} // mfxStatus VideoDECODEMPEG2::QueryIOSurf(VideoCORE *core, mfxVideoParam *par, mfxFrameAllocRequest *request)
+}
 
 // Actually calculate needed frames number
 mfxStatus VideoDECODEMPEG2::QueryIOSurfInternal(eMFXPlatform platform, eMFXHWType type, mfxVideoParam *par, mfxFrameAllocRequest *request)
@@ -1180,7 +1122,7 @@ mfxStatus VideoDECODEMPEG2::QueryIOSurfInternal(eMFXPlatform platform, eMFXHWTyp
     if (hevcParam && (!hevcParam->PicWidthInLumaSamples || !hevcParam->PicHeightInLumaSamples)) //  not initialized
         hevcParam = 0;
 
-    mfxI32 dpbSize = 5;
+    mfxI32 dpbSize = 2;
 
     mfxU32 numMin = dpbSize + 1 + asyncDepth;
     if (platform != MFX_PLATFORM_SOFTWARE && useDelayedDisplay) // equals if (m_useDelayedDisplay)

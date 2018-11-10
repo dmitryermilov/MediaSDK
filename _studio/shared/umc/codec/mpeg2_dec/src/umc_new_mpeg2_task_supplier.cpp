@@ -1167,7 +1167,7 @@ MPEG2DecoderFrame *TaskSupplier_MPEG2::GetFrameToDisplayInternal(bool force)
         view.pDPB->calculateInfoForDisplay(countDisplayable, countDPBFullness, maxUID);
 
         // show oldest frame
-        if (countDisplayable > 2 || force)
+        if (countDisplayable || force)
         {
             MPEG2DecoderFrame *pTmp = view.pDPB->findOldestDisplayable(view.dpbSize);
 
@@ -1382,47 +1382,22 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
 
         for (int32_t i = 0; i < (int32_t)pMediaDataEx->count; i++, pMediaDataEx->index ++)
         {
-            NalUnitType nut =
-                static_cast<NalUnitType>(pMediaDataEx->values[i]);
+            NalUnitType nut = static_cast<NalUnitType>(pMediaDataEx->values[i]);
 
             switch (nut)
             {
-/*
-            case NAL_UT_CODED_SLICE_RASL_N:
-            case NAL_UT_CODED_SLICE_RADL_N:
-            case NAL_UT_CODED_SLICE_TRAIL_R:
-            case NAL_UT_CODED_SLICE_TRAIL_N:
-            case NAL_UT_CODED_SLICE_TLA_R:
-            case NAL_UT_CODED_SLICE_TSA_N:
-            case NAL_UT_CODED_SLICE_STSA_R:
-            case NAL_UT_CODED_SLICE_STSA_N:
-            case NAL_UT_CODED_SLICE_BLA_W_LP:
-            case NAL_UT_CODED_SLICE_BLA_W_RADL:
-            case NAL_UT_CODED_SLICE_BLA_N_LP:
-            case NAL_UT_CODED_SLICE_IDR_W_RADL:
-            case NAL_UT_CODED_SLICE_IDR_N_LP:
-            case NAL_UT_CODED_SLICE_CRA:
-            case NAL_UT_CODED_SLICE_RADL_R:
-            case NAL_UT_CODED_SLICE_RASL_R:
-                if(MPEG2Slice *pSlice = DecodeSliceHeader(nalUnit))
-                {
-                    UMC::Status sts = AddSlice(pSlice, !pSource);
-                    if (sts == UMC::UMC_ERR_NOT_ENOUGH_BUFFER || sts == UMC::UMC_OK)
-                        return sts;
-                }
-                break;
-
-            case NAL_UT_SEI:
-            case NAL_UT_SEI_SUFFIX:
-                DecodeSEI(nalUnit);
-                break;
-
-            case NAL_UT_VPS:
-            case NAL_UT_SPS:
-            case NAL_UT_PPS:
-*/
             case NAL_UT_PICTURE_HEADER:
-                AddSlice(0, false);
+            {
+                UMC::Status umsRes = CompleteCurrentFrameOrField(false);
+                if (umsRes == UMC::UMC_OK)
+                {
+                    uint32_t nalIndex = pMediaDataEx->index;
+                    uint32_t size = pMediaDataEx->offsets[nalIndex + 1] - pMediaDataEx->offsets[nalIndex];
+                    pSource->MoveDataPointer(- size - 4); // since we're going to exit, need to restore position to the header to handle it later
+
+                    return UMC::UMC_OK;
+                }
+            }
             case NAL_UT_SEQUENCE_HEADER:
             case NAL_UT_EXTENSION:
                 {
@@ -1467,7 +1442,7 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
 
     if (!pSource)
     {
-        return AddSlice(0, true);
+        return CompleteCurrentFrameOrField(true);
     }
     else
     {
@@ -1476,7 +1451,7 @@ UMC::Status TaskSupplier_MPEG2::AddOneFrame(UMC::MediaData * pSource)
         if (!(flags & UMC::MediaData::FLAG_VIDEO_DATA_NOT_FULL_FRAME))
         {
             VM_ASSERT(!m_pLastSlice);
-            return AddSlice(0, true);
+            return CompleteCurrentFrameOrField(true);
         }
     }
 
@@ -1560,35 +1535,35 @@ MPEG2Slice *TaskSupplier_MPEG2::DecodeSliceHeader(UMC::MediaDataEx *nalUnit)
     return pSlice;
 }
 
+UMC::Status TaskSupplier_MPEG2::CompleteCurrentFrameOrField(bool force)
+{
+    if (m_pLastSlice)
+        throw mpeg2_exception(UMC::UMC_ERR_FAILED); // unexpected behavior
+
+    if (NULL == GetView()->pCurFrame)
+    {
+        return UMC::UMC_ERR_NOT_ENOUGH_DATA;
+    }
+
+    CompleteFrame(GetView()->pCurFrame);
+
+    OnFullFrame(GetView()->pCurFrame);
+    GetView()->pCurFrame = NULL;
+
+    if (force)
+    {
+        ReorderFrames(0);
+        return UMC::UMC_ERR_NOT_ENOUGH_DATA;
+    }
+
+    return UMC::UMC_OK;
+}
+
 // Add a new slice to frame
 UMC::Status TaskSupplier_MPEG2::AddSlice(MPEG2Slice * pSlice, bool force)
 {
     MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_HOTSPOTS, "TaskSupplier_MPEG2::AddSlice");
     m_pLastSlice = 0;
-
-    if (!pSlice) // complete frame
-    {
-        UMC::Status umcRes = UMC::UMC_ERR_NOT_ENOUGH_DATA;
-
-        if (NULL == GetView()->pCurFrame)
-        {
-            return umcRes;
-        }
-
-        CompleteFrame(GetView()->pCurFrame);
-
-        OnFullFrame(GetView()->pCurFrame);
-        GetView()->pCurFrame = NULL;
-
-        if (force)
-        {
-            MarkFramesDisplayable(0);
-            return umcRes;
-        }
-
-        umcRes = UMC::UMC_OK;
-        return umcRes;
-    }
 
     ViewItem_MPEG2 &view = *GetView();
     MPEG2DecoderFrame * pFrame = view.pCurFrame;
@@ -1708,8 +1683,6 @@ void TaskSupplier_MPEG2::CompleteFrame(MPEG2DecoderFrame * pFrame)
 
     DEBUG_PRINT((VM_STRING("Complete frame POC - (%d) type - %d, count - %d, m_uid - %d, IDR - %d\n"), pFrame->m_PicOrderCnt, pFrame->m_FrameType, slicesInfo->GetSliceCount(), pFrame->m_UID, slicesInfo->GetAnySlice()->GetSliceHeader()->IdrPicFlag));
 
-    //slicesInfo->EliminateASO();
-    //slicesInfo->EliminateErrors();
     m_prevSliceBroken = false;
 
     // skipping algorithm
@@ -1723,7 +1696,6 @@ void TaskSupplier_MPEG2::CompleteFrame(MPEG2DecoderFrame * pFrame)
         pFrame->OnDecodingCompleted();
         pFrame->SetisDisplayable(false);
         pFrame->m_pic_output = false;
-        DEBUG_PRINT((VM_STRING("Skip frame ForCRAorBLA - %s\n"), GetFrameInfoString(pFrame)));
         return;
     }
 
@@ -1875,10 +1847,10 @@ void TaskSupplier_MPEG2::InitFrameCounter(MPEG2DecoderFrame * pFrame, const MPEG
 
     DEBUG_PRINT((VM_STRING("Init frame %s\n"), GetFrameInfoString(pFrame)));
 
-    MarkFramesDisplayable(pFrame);
+    ReorderFrames(pFrame);
 }
 
-void TaskSupplier_MPEG2::MarkFramesDisplayable(MPEG2DecoderFrame * pFrame)
+void TaskSupplier_MPEG2::ReorderFrames(MPEG2DecoderFrame * pFrame)
 {
     if (pFrame)
     {
@@ -1939,7 +1911,9 @@ void TaskSupplier_MPEG2::MarkFramesDisplayable(MPEG2DecoderFrame * pFrame)
         for (MPEG2DecoderFrame * pTmp = GetView()->pDPB->head(); pTmp; pTmp = pTmp->future())
         {
             if (pTmp->IsFullFrame())
+            {
                 pTmp->SetisDisplayable(true);
+            }
         }
         return;
     }

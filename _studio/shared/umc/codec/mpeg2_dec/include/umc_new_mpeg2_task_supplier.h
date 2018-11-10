@@ -386,6 +386,8 @@ protected:
     virtual void CompleteFrame(MPEG2DecoderFrame * pFrame);
     // Mark frame as full with slices
     virtual void OnFullFrame(MPEG2DecoderFrame * pFrame);
+    //
+    virtual UMC::Status CompleteCurrentFrameOrField(bool force);
 
     // Update DPB contents marking frames for reuse
     void DPBUpdate(const MPEG2Slice * slice);
@@ -408,7 +410,7 @@ protected:
     UMC::Status CompleteDecodedFrames(MPEG2DecoderFrame ** decoded);
 
     // Reordering logic
-    virtual void MarkFramesDisplayable(MPEG2DecoderFrame * pFrame);
+    virtual void ReorderFrames(MPEG2DecoderFrame * pFrame);
 
     // Sets forward and backward references
     virtual void SetReferences(MPEG2DecoderFrame * pFrame);
