@@ -102,7 +102,7 @@ namespace UMC_MPEG2_DECODER
         for (MPEG2DecoderFrame* frm : decode_queue)
         {
             uint16_t surfCorruption = 0;
-            auto sts = m_packer->SyncTask(frm, &surfCorruption);
+            UMC::Status sts = UMC::UMC_OK; //m_packer->SyncTask(frm, &surfCorruption);
 
             frm->CompleteDecoding(); // complete frame even if there are errors
 
