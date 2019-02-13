@@ -428,6 +428,8 @@ namespace UMC_MPEG2_DECODER
 
         // It can be optimized without memory copy
         std::copy(in.begin + prefix_size, in.end, (uint8_t*)slice->source.GetDataPointer());
+        std::copy(in.begin + prefix_size, in.end, (uint8_t*)slice->source.GetDataPointer());
+
         slice->source.SetDataSize(size);
         slice->source.SetTime(in.pts);
 
