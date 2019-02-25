@@ -83,18 +83,14 @@ namespace UMC_MPEG2_DECODER
     {
         DPBType decode_queue;
 
-        {
-            std::unique_lock<std::mutex> l(m_guard);
-
-            // form frame queue in decoded order
-            std::for_each(m_dpb.begin(), m_dpb.end(),
-                [&decode_queue, &frame](MPEG2DecoderFrame * f)
-                {
-                    if (InProgress(*f) && f->decOrder <= frame.decOrder) // skip frames beyong the current frame (in dec order)
-                        decode_queue.push_back(f);
-                }
-            );
-        }
+        // form frame queue in decoded order
+        std::for_each(m_dpb.begin(), m_dpb.end(),
+            [&decode_queue, &frame](MPEG2DecoderFrame * f)
+            {
+                if (InProgress(*f) && f->decOrder <= frame.decOrder) // skip frames beyong the current frame (in dec order)
+                    decode_queue.push_back(f);
+            }
+        );
 
         decode_queue.sort([](MPEG2DecoderFrame const* f1, MPEG2DecoderFrame const* f2) { return f1->decOrder < f2->decOrder; });
 

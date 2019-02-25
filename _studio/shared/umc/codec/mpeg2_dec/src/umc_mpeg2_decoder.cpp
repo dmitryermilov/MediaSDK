@@ -462,16 +462,13 @@ namespace UMC_MPEG2_DECODER
         if (!slice)
         {
             // output all cached frames
-            {
-                std::unique_lock<std::mutex> l(m_guard);
-                std::for_each(m_dpb.begin(), m_dpb.end(),
-                    [](MPEG2DecoderFrame* frame)
-                    {
-                        if (!frame->IsReadyToBeOutputted() && frame->DecodingStarted())
-                            frame->SetReadyToBeOutputted();
-                    }
-                );
-            }
+            std::for_each(m_dpb.begin(), m_dpb.end(),
+                [](MPEG2DecoderFrame* frame)
+                {
+                    if (!frame->IsReadyToBeOutputted() && frame->DecodingStarted())
+                        frame->SetReadyToBeOutputted();
+                }
+            );
 
             if (m_currFrame)
             {
@@ -512,7 +509,6 @@ namespace UMC_MPEG2_DECODER
 
         if (info.GetSliceCount() == 1) // Set ref frames on the first slice of the picture
         {
-            std::unique_lock<std::mutex> l(m_guard);
             info.UpdateReferences(m_dpb);
         }
 
@@ -823,7 +819,6 @@ namespace UMC_MPEG2_DECODER
         {
             frame->SetReadyToBeOutputted();
 
-            std::unique_lock<std::mutex> l(m_guard);
             auto last = FindLastRefFrame(*frame, m_dpb);
             if (last)
             {
@@ -834,7 +829,6 @@ namespace UMC_MPEG2_DECODER
         }
         else
         {
-            std::unique_lock<std::mutex> l(m_guard);
             auto last = FindLastRefFrame(*frame, m_dpb);
             if (last)
                 last->SetReadyToBeOutputted();
@@ -960,8 +954,6 @@ namespace UMC_MPEG2_DECODER
 
     void MPEG2Decoder::CompleteDecodedFrames()
     {
-        std::unique_lock<std::mutex> l(m_guard);
-
         std::for_each(m_dpb.begin(), m_dpb.end(),
             [](MPEG2DecoderFrame* frame)
             {
@@ -973,8 +965,6 @@ namespace UMC_MPEG2_DECODER
 
     MPEG2DecoderFrame* MPEG2Decoder::GetFreeFrame()
     {
-        std::unique_lock<std::mutex> l(m_guard);
-
         MPEG2DecoderFrame* frame = (m_dpb.size() >= m_dpbSize) ? FindFreeFrame(m_dpb) : nullptr;
 
         // If nothing found
@@ -989,6 +979,7 @@ namespace UMC_MPEG2_DECODER
             // Didn't find any. Let's create a new one
             frame = new MPEG2DecoderFrame;
 
+            std::unique_lock<std::mutex> l(m_guard);
             // Add to DPB
             m_dpb.push_back(frame);
         }
@@ -999,8 +990,6 @@ namespace UMC_MPEG2_DECODER
     // Find a next frame ready to be output from decoder
     MPEG2DecoderFrame* MPEG2Decoder::GetFrameToDisplay()
     {
-        std::unique_lock<std::mutex> l(m_guard);
-
         DPBType displayable = m_dpb;
         displayable.remove_if(
             [](MPEG2DecoderFrame const * f)
@@ -1062,7 +1051,6 @@ namespace UMC_MPEG2_DECODER
 
     MPEG2DecoderFrame* MPEG2Decoder::FindFrameByMemID(UMC::FrameMemID id)
     {
-        std::unique_lock<std::mutex> l(m_guard);
         return FindFrame(
             [id](MPEG2DecoderFrame const* f)
             { return f->GetMemID() == id; }, m_dpb
