@@ -1,15 +1,15 @@
 // Copyright (c) 2018-2019 Intel Corporation
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -322,7 +322,7 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
 
     request.Type        = MFX_MEMTYPE_D3D_INT;
 
-    request.NumFrameMin = MaxRec(m_vpar);
+    request.NumFrameMin = MaxRec(m_vpar) + (m_vpar.m_ext.PerPackOutput.MaxNumRepack ? m_vpar.m_ext.PerPackOutput.MaxNumRepack : 0);
 
 #if (MFX_VERSION >= 1027)
     MFX_CHECK(GetRecInfo(m_vpar, request.Info), MFX_ERR_UNDEFINED_BEHAVIOR);
@@ -346,7 +346,7 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
     MFX_CHECK_STS(sts);
 
     request.Type        = MFX_MEMTYPE_D3D_INT;
-    request.NumFrameMin = MaxBs(m_vpar);
+    request.NumFrameMin = MaxBs(m_vpar) + (m_vpar.m_ext.PerPackOutput.MaxNumRepack ? m_vpar.m_ext.PerPackOutput.MaxNumRepack : 0);
 
     if (GetBsSize(request.Info) < GetMinBsSize(m_vpar))
     {
@@ -1006,17 +1006,35 @@ mfxStatus MFXVideoENCODEH265_HW::PrepareTask(Task& input_task)
     if (task->m_surf)
     {
         task->m_idxRaw  = (mfxU8)FindFreeResourceIndex(m_raw);
-        task->m_idxRec  = (mfxU8)FindFreeResourceIndex(m_rec);
-        task->m_idxBs   = (mfxU8)FindFreeResourceIndex(m_bs);
-        task->m_idxCUQp = (mfxU8)FindFreeResourceIndex(m_CuQp);
-        MFX_CHECK(task->m_idxBs  != IDX_INVALID, MFX_ERR_NONE);
-        MFX_CHECK(task->m_idxRec != IDX_INVALID, MFX_ERR_NONE);
-
+        MFX_CHECK(task->m_idxRaw != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midRaw  = AcquireResource(m_raw,  task->m_idxRaw);
+        MFX_CHECK(task->m_midRaw, MFX_ERR_UNDEFINED_BEHAVIOR);
+
+        task->m_idxRec  = (mfxU8)FindFreeResourceIndex(m_rec);
+        MFX_CHECK(task->m_idxRec != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midRec  = AcquireResource(m_rec,  task->m_idxRec);
+        MFX_CHECK(task->m_midRec, MFX_ERR_UNDEFINED_BEHAVIOR);
+        for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+        {
+            task->m_idxsRec_for_pak[i] = (mfxU8)FindFreeResourceIndex(m_rec);
+            MFX_CHECK(task->m_idxsRec_for_pak[i] != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
+            task->m_midsRec_for_pak[i]  = AcquireResource(m_rec,  task->m_idxsRec_for_pak[i]);
+            MFX_CHECK(task->m_midsRec_for_pak[i], MFX_ERR_UNDEFINED_BEHAVIOR);
+        }
+
+        task->m_idxBs   = (mfxU8)FindFreeResourceIndex(m_bs);
+        MFX_CHECK(task->m_idxBs  != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midBs   = AcquireResource(m_bs,   task->m_idxBs);
+        for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+        {
+            task->m_idxsBs_for_pak[i]   = (mfxU8)FindFreeResourceIndex(m_bs);
+            MFX_CHECK(task->m_idxsBs_for_pak[i]  != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
+            task->m_midBs_for_pak[i]   = AcquireResource(m_bs,   task->m_idxsBs_for_pak[i]);
+            MFX_CHECK(task->m_midBs_for_pak[i], MFX_ERR_UNDEFINED_BEHAVIOR);
+        }
+
+        task->m_idxCUQp = (mfxU8)FindFreeResourceIndex(m_CuQp);
         task->m_midCUQp = AcquireResource(m_CuQp, task->m_idxCUQp);
-        MFX_CHECK(task->m_midRec && task->m_midBs, MFX_ERR_UNDEFINED_BEHAVIOR);
 
         ConfigureTask(*task, m_lastTask, m_vpar, m_caps, m_baseLayerOrder);
 
@@ -1290,6 +1308,15 @@ mfxStatus  MFXVideoENCODEH265_HW::FreeTask(Task &task)
         ReleaseResource(m_bs,  task.m_midBs);
         task.m_midBs = 0;
     }
+    for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+    {
+        if (task.m_midBs_for_pak[i])
+        {
+            ReleaseResource(m_bs,  task.m_midBs_for_pak[i]);
+            task.m_midBs_for_pak[i] = nullptr;
+        }
+    }
+
     if (task.m_midCUQp)
     {
         ReleaseResource(m_bs,  task.m_midCUQp);
@@ -1308,6 +1335,15 @@ mfxStatus  MFXVideoENCODEH265_HW::FreeTask(Task &task)
             ReleaseResource(m_raw, task.m_midRaw);
             ReleaseResource(m_rawSkip, task.m_midRaw);
             task.m_midRaw =0;
+        }
+    }
+
+    for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+    {
+        if (task.m_midsRec_for_pak[i])
+        {
+            ReleaseResource(m_rec,  task.m_midsRec_for_pak[i]);
+            task.m_midsRec_for_pak[i] = nullptr;
         }
     }
 

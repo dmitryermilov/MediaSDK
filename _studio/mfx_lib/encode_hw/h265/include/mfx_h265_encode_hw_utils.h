@@ -377,6 +377,11 @@ struct Task : DpbFrame
 #endif  // MFX_ENABLE_HEVCE_DIRTY_RECT
 
     mfxU16            m_SkipMode                      = 0;
+
+    mfxU32            m_idxsBs_for_pak[8]             = {IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID};
+    mfxMemId          m_midBs_for_pak[8]              = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    mfxU8             m_idxsRec_for_pak[8]            = {IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID};
+    mfxMemId          m_midsRec_for_pak[8]            = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 };
 
 enum
