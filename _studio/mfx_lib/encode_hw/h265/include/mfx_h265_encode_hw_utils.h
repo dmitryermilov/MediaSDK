@@ -1,15 +1,15 @@
 // Copyright (c) 2018-2019 Intel Corporation
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -426,7 +426,8 @@ namespace ExtBuffer
          MFX_EXTBUFF_MBQP,
          MFX_EXTBUFF_ENCODER_ROI,
          MFX_EXTBUFF_DIRTY_RECTANGLES,
-         MFX_EXTBUFF_ENCODED_FRAME_INFO
+         MFX_EXTBUFF_ENCODED_FRAME_INFO,
+         MFX_EXTBUFF_REPACK_OUTPUT
     };
 
     template<class T> struct ExtBufferMap {};
@@ -455,7 +456,8 @@ namespace ExtBuffer
 #if defined(MFX_ENABLE_HEVCE_WEIGHTED_PREDICTION)
         EXTBUF(mfxExtPredWeightTable,       MFX_EXTBUFF_PRED_WEIGHT_TABLE);
 #endif //defined(MFX_ENABLE_HEVCE_WEIGHTED_PREDICTION)
-        EXTBUF(mfxExtAVCEncodedFrameInfo, MFX_EXTBUFF_ENCODED_FRAME_INFO);
+        EXTBUF(mfxExtAVCEncodedFrameInfo,   MFX_EXTBUFF_ENCODED_FRAME_INFO);
+        EXTBUF(mfxExtPerPackOutput,         MFX_EXTBUFF_REPACK_OUTPUT);
 
     #undef EXTBUF
 
@@ -561,6 +563,11 @@ namespace ExtBuffer
     inline void  CopySupportedParams(mfxExtEncoderCapability& buf_dst, mfxExtEncoderCapability& buf_src)
     {
         MFX_COPY_FIELD(MBPerSec);
+    }
+
+    inline void  CopySupportedParams(mfxExtPerPackOutput& buf_dst, mfxExtPerPackOutput& buf_src)
+    {
+        MFX_COPY_FIELD(MaxNumRepack);
     }
 
     template<class T> void Init(T& buf)
@@ -786,7 +793,8 @@ public:
         mfxExtBRC                   extBRC;
         mfxExtEncoderROI            ROI;
         mfxExtDirtyRect             DirtyRect;
-        mfxExtEncoderResetOption   ResetOpt;
+        mfxExtEncoderResetOption    ResetOpt;
+        mfxExtPerPackOutput         PerPackOutput;
         mfxExtBuffer *              m_extParam[SIZE_OF_ARRAY(ExtBuffer::allowed_buffers)];
     } m_ext;
 

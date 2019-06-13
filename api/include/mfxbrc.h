@@ -1,15 +1,15 @@
 // Copyright (c) 2019 Intel Corporation
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -29,7 +29,8 @@ extern "C"
 
 /* Extended Buffer Ids */
 enum {
-    MFX_EXTBUFF_BRC = MFX_MAKEFOURCC('E','B','R','C')
+    MFX_EXTBUFF_BRC                = MFX_MAKEFOURCC('E','B','R','C'),
+    MFX_EXTBUFF_BRC_REPACK_OUTPUT  = MFX_MAKEFOURCC('E','B','R','O')
 };
 
 typedef struct {
@@ -77,10 +78,15 @@ enum {
     MFX_BRC_PANIC_SMALL_FRAME = 4  // Coded frame is too small, no further recoding possible - required padding to MinFrameSize
 };
 
+enum {
+    MFX_DEFAULT_ENCODE_RESULT = 0xFFFF
+};
+
 typedef struct {
     mfxU32 MinFrameSize;    // Size in bytes, coded frame must be padded to when Status = MFX_BRC_PANIC_SMALL_FRAME
     mfxU16 BRCStatus;       // See BRCStatus enumerator
-    mfxU16 reserved[25];
+    mfxU16 ActualRepakPass;
+    mfxU16 reserved[24];
     mfxHDL reserved1;
 } mfxBRCFrameStatus;
 
@@ -113,9 +119,14 @@ typedef struct {
     mfxHDL reserved1[10];
 } mfxExtBRC;
 
+typedef struct {
+    mfxExtBuffer           Header;
+    mfxFrameSurface1*      Reconstruct[8];
+    mfxBitstream*          Bitstream[8];
+} mfxBRCRepackOutput;
+
 #ifdef __cplusplus
 } // extern "C"
 #endif /* __cplusplus */
 
 #endif
-
