@@ -76,7 +76,8 @@ public:
         , VABID_RIR
         , VABID_MaxSliceSize
 
-        , VABID_REPAK_CTRL
+        , VABID_REPACK_CTRL
+        , VABID_REPACK_OUTPOUT
 
         , VABID_END_OF_LIST // Remain this item last in the list
     };

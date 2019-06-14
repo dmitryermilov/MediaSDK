@@ -360,10 +360,15 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
     sts = m_ddi->Register(m_bs, D3DDDIFMT_INTELENCODE_BITSTREAMDATA);
     MFX_CHECK_STS(sts);
 
+    m_packBs.resize(m_vpar.m_ext.PerPackOutput.MaxNumRepack);
+    for (uint32_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+    {
+        m_packBs[i].resize(GetMinBsSize(m_vpar));
+    }
+
     m_task.Reset(m_vpar.isField(), MaxTask(m_vpar));
 
     m_lastTask = Task();
-
 
     m_NumberOfSlicesForOpt = m_vpar.mfx.NumSlice;
     ZeroParams();
@@ -1178,7 +1183,8 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
 
         if (m_brc)
         {
-            brcStatus = m_brc->PostPackFrame(m_vpar,*taskForQuery, (taskForQuery->m_bsDataLength + SEI_len)*8,0,taskForQuery->m_recode);
+            brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, m_packBs, (taskForQuery->m_bsDataLength + SEI_len)*8, 0, taskForQuery->m_recode);
+
             //printf("m_brc->PostPackFrame poc %d, qp %d, len %d, type %d, status %d\n", taskForQuery->m_poc,taskForQuery->m_qpY, taskForQuery->m_bsDataLength,taskForQuery->m_codingType, brcStatus);
             if (brcStatus != MFX_BRC_OK)
             {
@@ -1190,9 +1196,9 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
                     mfxI32 minSize = 0, maxSize = 0;
                     //padding is needed
                     m_brc->GetMinMaxFrameSize(&minSize, &maxSize);
-                   taskForQuery->m_minFrameSize = (mfxU32) ((minSize + 7) >> 3);
-                   brcStatus = m_brc->PostPackFrame(m_vpar,*taskForQuery, taskForQuery->m_minFrameSize<<3,0,++taskForQuery->m_recode);
-                   MFX_CHECK(brcStatus != MFX_BRC_ERROR,  MFX_ERR_UNDEFINED_BEHAVIOR);
+                    taskForQuery->m_minFrameSize = (mfxU32) ((minSize + 7) >> 3);
+                    brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, m_packBs, taskForQuery->m_minFrameSize<<3, 0, ++taskForQuery->m_recode);
+                    MFX_CHECK(brcStatus != MFX_BRC_ERROR,  MFX_ERR_UNDEFINED_BEHAVIOR);
                 }
                 else
                 {
@@ -1220,10 +1226,17 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
         //update bitstream
         if (taskForQuery->m_bsDataLength)
         {
+            mfxMemId bsMemid = taskForQuery->m_midBs;
+            if (taskForQuery->m_actualRepakPass != MFX_DEFAULT_ENCODE_RESULT)
+            {
+                taskForQuery->m_bsDataLength = taskForQuery->m_pakBsSizes[taskForQuery->m_actualRepakPass];
+                bsMemid = taskForQuery->m_midBs_for_pak[taskForQuery->m_actualRepakPass];
+            }
+
             mfxFrameData codedFrame = {};
             mfxU32 bytesAvailable = bs->MaxLength - bs->DataOffset - bs->DataLength;
             mfxU32 bytes2copy     = taskForQuery->m_bsDataLength;
-            mfxI32 dpbOutputDelay = taskForQuery->m_fo +  GetNumReorderFrames(m_vpar.mfx.GopRefDist-1,m_vpar.isBPyramid(), m_vpar.isField(), m_vpar.bFieldReord) - taskForQuery->m_eo;
+            mfxI32 dpbOutputDelay = taskForQuery->m_fo + GetNumReorderFrames(m_vpar.mfx.GopRefDist-1,m_vpar.isBPyramid(), m_vpar.isField(), m_vpar.bFieldReord) - taskForQuery->m_eo;
             mfxU8* bsData         = bs->Data + bs->DataOffset + bs->DataLength;
             mfxU32* pDataLength   = &bs->DataLength;
 
@@ -1232,14 +1245,14 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
             MFX_CHECK(bytesAvailable >= bytes2copy, MFX_ERR_NOT_ENOUGH_BUFFER);
             //codedFrame.MemType = MFX_MEMTYPE_INTERNAL_FRAME;
 
-            sts = m_core->LockFrame(taskForQuery->m_midBs, &codedFrame);
+            sts = m_core->LockFrame(bsMemid, &codedFrame);
             MFX_CHECK_STS(sts);
             MFX_CHECK(codedFrame.Y, MFX_ERR_LOCK_MEMORY);
 
             mfxSize roi = {(int32_t)bytes2copy, 1};
             FastCopy::Copy(bsData, bytes2copy, codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
 
-            sts = m_core->UnlockFrame(taskForQuery->m_midBs, &codedFrame);
+            sts = m_core->UnlockFrame(bsMemid, &codedFrame);
             MFX_CHECK_STS(sts);
 
             *pDataLength   += bytes2copy;

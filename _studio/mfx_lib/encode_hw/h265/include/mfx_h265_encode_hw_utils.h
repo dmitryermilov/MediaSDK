@@ -384,6 +384,9 @@ struct Task : DpbFrame
     mfxMemId          m_midBs_for_pak[8]              = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     mfxU8             m_idxsRec_for_pak[8]            = {IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID};
     mfxMemId          m_midsRec_for_pak[8]            = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    mfxU32            m_pakBsSizes[8]                 = {};
+
+    uint32_t          m_actualRepakPass               = MFX_DEFAULT_ENCODE_RESULT;
 };
 
 enum
