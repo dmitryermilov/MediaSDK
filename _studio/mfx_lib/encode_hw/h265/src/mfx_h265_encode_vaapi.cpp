@@ -547,6 +547,47 @@ mfxStatus SetQualityLevelParams(
     return MFX_ERR_NONE;
 }
 
+static mfxStatus SetMultiPassFrameSize(
+    Task const & task,
+    VADisplay    vaDisplay,
+    VAContextID  vaContextEncode,
+    VABufferID & frameSizeBuf_id)
+{
+    VAEncMiscParameterBuffer *misc_param;
+    VAEncMiscParameterBufferMultiPassFrameSize *p_multiPassFrameSize;
+
+    mfxStatus mfxSts = CheckAndDestroyVAbuffer(vaDisplay, frameSizeBuf_id);
+    MFX_CHECK_STS(mfxSts);
+
+    VAStatus vaSts = vaCreateBuffer(vaDisplay,
+        vaContextEncode,
+        VAEncMiscParameterBufferType,
+        sizeof(VAEncMiscParameterBuffer) + sizeof(VAEncMiscParameterBufferMultiPassFrameSize),
+        1,
+        NULL,
+        &frameSizeBuf_id);
+    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+
+    {
+        MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_EXTCALL, "vaMapBuffer");
+        vaSts = vaMapBuffer(vaDisplay, frameSizeBuf_id, (void **)&misc_param);
+    }
+    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+    misc_param->type = VAEncMiscParameterTypeMultiPassFrameSize;
+    p_multiPassFrameSize = (VAEncMiscParameterBufferMultiPassFrameSize *)misc_param->data;
+
+    p_multiPassFrameSize->max_frame_size = task.m_brcFrameCtrl.MaxFrameSize;
+    p_multiPassFrameSize->num_passes = task.m_brcFrameCtrl.MaxNumRepak;
+    p_multiPassFrameSize->delta_qp = (unsigned char *)task.m_brcFrameCtrl.DeltaQP;
+    {
+        MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_EXTCALL, "vaUnmapBuffer");
+        vaSts = vaUnmapBuffer(vaDisplay, frameSizeBuf_id);
+    }
+    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+
+    return MFX_ERR_NONE;
+}
+
 void FillConstPartOfPps(
     MfxVideoParam const & par,
     VAEncPictureParameterBufferHEVC & pps)
@@ -1696,6 +1737,12 @@ mfxStatus VAAPIEncoder::Execute(Task const & task, mfxHDLPair pair)
         VABufferID &m_rirId = VABufferNew(VABID_RIR,0);
         MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetRollingIntraRefresh(task.m_IRState, m_vaDisplay,
                                                                  m_vaContextEncode, m_rirId), MFX_ERR_DEVICE_FAILED);
+    }
+
+    if (task.m_brcFrameCtrl.MaxNumRepak && task.m_brcFrameCtrl.MaxFrameSize)
+    {
+        VABufferID & repakId = VABufferNew(VABID_REPAK_CTRL,0);
+        MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassFrameSize(task, m_vaDisplay, m_vaContextEncode, repakId), MFX_ERR_DEVICE_FAILED);
     }
 
     mfxU32 storedSize = 0;

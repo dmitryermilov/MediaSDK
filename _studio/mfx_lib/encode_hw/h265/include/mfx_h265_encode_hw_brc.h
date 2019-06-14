@@ -324,6 +324,9 @@ public:
 
         InitFramePar(task,frame_par);
         m_pBRC->GetFrameCtrl(m_pBRC->pthis,&frame_par, &frame_ctrl);
+
+        task.m_brcFrameCtrl = frame_ctrl;
+
         return frame_ctrl.QpY;
     }
     virtual mfxStatus   SetQP(mfxI32 , uint16_t , bool )

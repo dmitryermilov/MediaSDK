@@ -378,6 +378,8 @@ struct Task : DpbFrame
 
     mfxU16            m_SkipMode                      = 0;
 
+    mfxBRCFrameCtrl   m_brcFrameCtrl;
+
     mfxU32            m_idxsBs_for_pak[8]             = {IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID};
     mfxMemId          m_midBs_for_pak[8]              = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     mfxU8             m_idxsRec_for_pak[8]            = {IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID};

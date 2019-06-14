@@ -949,6 +949,13 @@ mfxStatus ExtBRC::GetFrameCtrl (mfxBRCFrameParam* par, mfxBRCFrameCtrl* ctrl)
         qp = GetCurQP (type, par->PyramidLayer);
     }
     ctrl->QpY = qp - m_par.quantOffset;
+
+    ctrl->MaxFrameSize = 1; // Just non zero value to trigger all PAK passes
+    ctrl->MaxNumRepak = 3;
+    ctrl->DeltaQP[0] = 5;
+    ctrl->DeltaQP[1] = 1;
+    ctrl->DeltaQP[2] = 1;
+
     //printf("ctrl->QpY %d, qp %d quantOffset %d\n", ctrl->QpY , qp , m_par.quantOffset);
     return MFX_ERR_NONE;
 }
