@@ -1864,7 +1864,7 @@ void MfxVideoParam::SyncMfxToHeadersParam(mfxU32 numSlicesForSTRPSOpt)
 #endif
         m_pps.transform_skip_enabled_flag = 0;
 
-    m_pps.cu_qp_delta_enabled_flag = IsOn(m_ext.CO3.EnableMBQP);
+    m_pps.cu_qp_delta_enabled_flag = IsOn(m_ext.CO3.EnableMBQP) || IsOn(m_ext.CO2.ExtBRC);
 
     if (m_ext.CO2.MaxSliceSize)
         m_pps.cu_qp_delta_enabled_flag = 1;
