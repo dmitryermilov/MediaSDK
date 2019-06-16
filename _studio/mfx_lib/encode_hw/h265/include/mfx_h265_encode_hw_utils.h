@@ -385,6 +385,7 @@ struct Task : DpbFrame
     mfxU8             m_idxsRec_for_pak[8]            = {IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID, IDX_INVALID};
     mfxMemId          m_midsRec_for_pak[8]            = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     mfxU32            m_pakBsSizes[8]                 = {};
+    mfxU32            m_pakQPs[8]                     = {};
 
     uint32_t          m_actualRepakPass               = MFX_DEFAULT_ENCODE_RESULT;
 };
@@ -1163,6 +1164,8 @@ inline mfxI32 GetFrameNum(bool bField, mfxI32 Poc, bool bSecondField)
 {
     return bField ? (Poc + (!bSecondField)) / 2 : Poc;
 }
+
+mfxU32 GetMinBsSize(MfxVideoParam const & par);
 
 }; //namespace MfxHwH265Encode
 #endif

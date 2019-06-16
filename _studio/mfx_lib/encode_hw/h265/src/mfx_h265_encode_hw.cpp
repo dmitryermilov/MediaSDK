@@ -47,7 +47,7 @@ inline mfxStatus GetWorstSts(mfxStatus sts1, mfxStatus sts2)
 
 mfxU16 MaxRec(MfxVideoParam const & par)
 {
-    return par.AsyncDepth + par.mfx.NumRefFrame + ((par.AsyncDepth > 1)? 1: 0);
+    return par.AsyncDepth + par.mfx.NumRefFrame + ((par.AsyncDepth > 1)? 1: 0) + (par.m_ext.PerPackOutput.MaxNumRepack * par.AsyncDepth);
 }
 mfxU16 NumFramesForReord(MfxVideoParam const & par)
 {
@@ -65,46 +65,13 @@ mfxU16 MaxRaw(MfxVideoParam const & par)
 
 mfxU16 MaxBs(MfxVideoParam const & par)
 {
-    return par.AsyncDepth + ((par.AsyncDepth > 1)? 1: 0); // added buffered task between submit into ddi and query
+    return par.AsyncDepth + ((par.AsyncDepth > 1)? 1: 0) + (par.m_ext.PerPackOutput.MaxNumRepack * par.AsyncDepth); // added buffered task between submit into ddi and query
 }
 mfxU32 GetBsSize(mfxFrameInfo& info)
 {
     return info.Width* info.Height;
 }
-mfxU32 GetMinBsSize(MfxVideoParam const & par)
-{
-    mfxU32 size = par.mfx.FrameInfo.Width * par.mfx.FrameInfo.Height;
 
-    mfxF64 k = 2.0;
-#if (MFX_VERSION >= 1027)
-    if (par.m_ext.CO3.TargetBitDepthLuma == 10)
-        k = k + 0.3;
-    if (par.m_ext.CO3.TargetChromaFormatPlus1 - 1 == MFX_CHROMAFORMAT_YUV422)
-        k = k + 0.5;
-    else if (par.m_ext.CO3.TargetChromaFormatPlus1 - 1 == MFX_CHROMAFORMAT_YUV444)
-        k = k + 1.5;
-#else
-    if (par.mfx.FrameInfo.BitDepthLuma == 10)
-        k = k + 0.3;
-    if (par.mfx.FrameInfo.ChromaFormat == MFX_CHROMAFORMAT_YUV422)
-        k = k + 0.5;
-    else if (par.mfx.FrameInfo.ChromaFormat == MFX_CHROMAFORMAT_YUV444)
-        k = k + 1.5;
-#endif
-
-    size = (mfxU32)(k*size);
-
-    if (par.mfx.RateControlMethod == MFX_RATECONTROL_CBR && !par.isSWBRC() &&
-        par.mfx.FrameInfo.FrameRateExtD!= 0)
-    {
-        mfxU32 avg_size =  par.TargetKbps * 1000 * par.mfx.FrameInfo.FrameRateExtD / (par.mfx.FrameInfo.FrameRateExtN * 8);
-        if (size < 2*avg_size)
-            size = 2*avg_size;
-    }
-
-    return size;
-
-}
 mfxU16 MaxTask(MfxVideoParam const & par)
 {
     return par.AsyncDepth + NumFramesForReord(par) + ((par.AsyncDepth > 1)? 1: 0);
@@ -322,7 +289,7 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
 
     request.Type        = MFX_MEMTYPE_D3D_INT;
 
-    request.NumFrameMin = MaxRec(m_vpar) + (m_vpar.m_ext.PerPackOutput.MaxNumRepack ? m_vpar.m_ext.PerPackOutput.MaxNumRepack : 0);
+    request.NumFrameMin = MaxRec(m_vpar);
 
 #if (MFX_VERSION >= 1027)
     MFX_CHECK(GetRecInfo(m_vpar, request.Info), MFX_ERR_UNDEFINED_BEHAVIOR);
@@ -346,7 +313,7 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
     MFX_CHECK_STS(sts);
 
     request.Type        = MFX_MEMTYPE_D3D_INT;
-    request.NumFrameMin = MaxBs(m_vpar) + (m_vpar.m_ext.PerPackOutput.MaxNumRepack ? m_vpar.m_ext.PerPackOutput.MaxNumRepack : 0);
+    request.NumFrameMin = MaxBs(m_vpar);
 
     if (GetBsSize(request.Info) < GetMinBsSize(m_vpar))
     {
@@ -359,12 +326,6 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
 
     sts = m_ddi->Register(m_bs, D3DDDIFMT_INTELENCODE_BITSTREAMDATA);
     MFX_CHECK_STS(sts);
-
-    m_packBs.resize(m_vpar.m_ext.PerPackOutput.MaxNumRepack);
-    for (uint32_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
-    {
-        m_packBs[i].resize(GetMinBsSize(m_vpar));
-    }
 
     m_task.Reset(m_vpar.isField(), MaxTask(m_vpar));
 
@@ -1030,6 +991,7 @@ mfxStatus MFXVideoENCODEH265_HW::PrepareTask(Task& input_task)
         task->m_idxBs   = (mfxU8)FindFreeResourceIndex(m_bs);
         MFX_CHECK(task->m_idxBs  != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midBs   = AcquireResource(m_bs,   task->m_idxBs);
+
         for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
         {
             task->m_idxsBs_for_pak[i]   = (mfxU8)FindFreeResourceIndex(m_bs);
@@ -1183,7 +1145,7 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
 
         if (m_brc)
         {
-            brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, m_packBs, (taskForQuery->m_bsDataLength + SEI_len)*8, 0, taskForQuery->m_recode);
+            brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, (taskForQuery->m_bsDataLength + SEI_len)*8, 0, taskForQuery->m_recode);
 
             //printf("m_brc->PostPackFrame poc %d, qp %d, len %d, type %d, status %d\n", taskForQuery->m_poc,taskForQuery->m_qpY, taskForQuery->m_bsDataLength,taskForQuery->m_codingType, brcStatus);
             if (brcStatus != MFX_BRC_OK)
@@ -1197,7 +1159,7 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
                     //padding is needed
                     m_brc->GetMinMaxFrameSize(&minSize, &maxSize);
                     taskForQuery->m_minFrameSize = (mfxU32) ((minSize + 7) >> 3);
-                    brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, m_packBs, taskForQuery->m_minFrameSize<<3, 0, ++taskForQuery->m_recode);
+                    brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, taskForQuery->m_minFrameSize<<3, 0, ++taskForQuery->m_recode);
                     MFX_CHECK(brcStatus != MFX_BRC_ERROR,  MFX_ERR_UNDEFINED_BEHAVIOR);
                 }
                 else
@@ -1227,9 +1189,10 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
         if (taskForQuery->m_bsDataLength)
         {
             mfxMemId bsMemid = taskForQuery->m_midBs;
-            if (taskForQuery->m_actualRepakPass != MFX_DEFAULT_ENCODE_RESULT)
+            if (m_vpar.m_ext.PerPackOutput.MaxNumRepack && (taskForQuery->m_actualRepakPass != MFX_DEFAULT_ENCODE_RESULT))
             {
                 taskForQuery->m_bsDataLength = taskForQuery->m_pakBsSizes[taskForQuery->m_actualRepakPass];
+                taskForQuery->m_avgQP= taskForQuery->m_pakQPs[taskForQuery->m_actualRepakPass];
                 bsMemid = taskForQuery->m_midBs_for_pak[taskForQuery->m_actualRepakPass];
             }
 

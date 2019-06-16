@@ -634,7 +634,7 @@ static mfxStatus SetMultiPassRePAKOutput(
 
         ctrl->coded_buffers[i] = codedBuffer;
         ctrl->reconstructed_pictures[i] = reconQueue[task.m_idxsRec_for_pak[i]].surface;
-        printf("[PAK %lu] reconstructed picture_id %d\n", i + 1, ctrl->reconstructed_pictures[i]);
+        //printf("[PAK %lu] reconstructed picture_id %d\n", i + 1, ctrl->reconstructed_pictures[i]);
     }
 
     ctrl->num_passes = task.m_brcFrameCtrl.MaxNumRepak;
@@ -1798,13 +1798,19 @@ mfxStatus VAAPIEncoder::Execute(Task const & task, mfxHDLPair pair)
                                                                  m_vaContextEncode, m_rirId), MFX_ERR_DEVICE_FAILED);
     }
 
-    if (task.m_brcFrameCtrl.MaxNumRepak && task.m_brcFrameCtrl.MaxFrameSize)
+    if (task.m_brcFrameCtrl.MaxNumRepak)
     {
-        VABufferID & repakId = VABufferNew(VABID_REPACK_CTRL,0);
-        MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassFrameSize(task, m_vaDisplay, m_vaContextEncode, repakId), MFX_ERR_DEVICE_FAILED);
+        if (task.m_brcFrameCtrl.MaxFrameSize)
+        {
+            VABufferID & repakId = VABufferNew(VABID_REPACK_CTRL,0);
+            MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassFrameSize(task, m_vaDisplay, m_vaContextEncode, repakId), MFX_ERR_DEVICE_FAILED);
+        }
 
-        VABufferID &pakOutputId = VABufferNew(VABID_REPACK_OUTPOUT, 0);
-        MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassRePAKOutput(task, m_reconQueue, m_bsQueue, m_vaDisplay, m_vaContextEncode, pakOutputId), MFX_ERR_DEVICE_FAILED);
+        if (m_videoParam.m_ext.PerPackOutput.MaxNumRepack)
+        {
+            VABufferID &pakOutputId = VABufferNew(VABID_REPACK_OUTPOUT, 0);
+            MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassRePAKOutput(task, m_reconQueue, m_bsQueue, m_vaDisplay, m_vaContextEncode, pakOutputId), MFX_ERR_DEVICE_FAILED);
+        }
     }
 
     mfxU32 storedSize = 0;
@@ -2025,7 +2031,7 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
                     MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
                 }
 
-                printf("\nbs[%d] size %d, qp %d\n", 0, codedBufferSegment->size, codedBufferSegment->status & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK);
+                //printf("\nbs[%d] size %d, qp %d\n", 0, codedBufferSegment->size, codedBufferSegment->status & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK);
 
                 task.m_bsDataLength = codedBufferSegment->size;
                 task.m_avgQP = (codedBufferSegment->status & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK);
@@ -2046,22 +2052,26 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
                 // Sync FEI output buffers
                 MFX_CHECK_WITH_ASSERT(PostQueryExtraStage(task, codedStatus) == MFX_ERR_NONE, MFX_ERR_DEVICE_FAILED);
 
-                for (size_t i = 0; i < 3; ++i)
+                if (m_videoParam.m_ext.PerPackOutput.MaxNumRepack)
                 {
-                    mfxU32 idxBs = task.m_idxsBs_for_pak[i];
-                    VABufferID buffer = m_bsQueue[idxBs].surface;
+                    for (size_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak; ++i)
+                    {
+                        mfxU32 idxBs = task.m_idxsBs_for_pak[i];
+                        VABufferID buffer = m_bsQueue[idxBs].surface;
 
-                    vaSts = vaMapBuffer(
-                        m_vaDisplay,
-                        buffer,
-                        (void **)(&codedBufferSegment));
-                    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+                        vaSts = vaMapBuffer(
+                            m_vaDisplay,
+                            buffer,
+                            (void **)(&codedBufferSegment));
+                        MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
 
-                    task.m_pakBsSizes[i] = codedBufferSegment->size;
-                    printf("bs[%lu] size %d, qp %d\n", i+1, codedBufferSegment->size, codedBufferSegment->status & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK);
+                        task.m_pakBsSizes[i] = codedBufferSegment->size;
+                        task.m_pakQPs[i] = codedBufferSegment->status & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK;
+                        //printf("bs[%lu] size %d, qp %d\n", i+1, codedBufferSegment->size, codedBufferSegment->status & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK);
 
-                    vaSts = vaUnmapBuffer( m_vaDisplay, buffer );
-                    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+                        vaSts = vaUnmapBuffer( m_vaDisplay, buffer );
+                        MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+                    }
                 }
 
                 return sts;

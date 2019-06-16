@@ -148,7 +148,7 @@ public:
     virtual void PreEnc(mfxU32 frameType, std::vector<VmeData *> const & vmeData, mfxU32 encOrder) = 0;
     virtual mfxI32 GetQP(MfxVideoParam &video, Task &task)=0;
     virtual mfxStatus SetQP(mfxI32 qp, mfxU16 frameType, bool bLowDelay) = 0;
-    virtual mfxBRCStatus   PostPackFrame(MfxVideoParam &video, VideoCORE * core, Task &task, std::vector<std::vector<mfxU8>> & packBitsteams, mfxI32 bitsEncodedFrame, mfxI32 overheadBits, mfxI32 recode = 0) =0;
+    virtual mfxBRCStatus   PostPackFrame(MfxVideoParam &video, VideoCORE * core, Task &task, mfxI32 bitsEncodedFrame, mfxI32 overheadBits, mfxI32 recode = 0) =0;
     virtual mfxStatus SetFrameVMEData(const mfxExtLAFrameStatistics*, mfxU32 , mfxU32 ) = 0;
     virtual void GetMinMaxFrameSize(mfxI32 *minFrameSizeInBits, mfxI32 *maxFrameSizeInBits) = 0;
     virtual bool IsVMEBRC() = 0;
@@ -176,7 +176,7 @@ public:
 
     void PreEnc(mfxU32 frameType, std::vector<VmeData *> const & vmeData, mfxU32 encOrder);
 
-    mfxBRCStatus   PostPackFrame(MfxVideoParam & /*video*/, VideoCORE * core, Task &task, std::vector<std::vector<mfxU8>> & packBitsteams, mfxI32 bitsEncodedFrame, mfxI32 /*overheadBits*/, mfxI32 /*recode = 0*/)
+    mfxBRCStatus   PostPackFrame(MfxVideoParam & /*video*/, VideoCORE * core, Task &task, mfxI32 bitsEncodedFrame, mfxI32 /*overheadBits*/, mfxI32 /*recode = 0*/)
     {
         Report(task.m_frameType, bitsEncodedFrame >> 3, 0, 0, task.m_eo, 0, 0);
         return MFX_ERR_NONE;
@@ -257,6 +257,13 @@ public:
             MFX_CHECK_STS(sts);
             m_pBRC = &m_BRCLocal;
         }
+
+        m_packBitsteams.resize(video.m_ext.PerPackOutput.MaxNumRepack+1);
+        for (uint32_t i = 0; i < m_packBitsteams.size(); ++i)
+        {
+            m_packBitsteams[i].resize(GetMinBsSize(video));
+        }
+
         return m_pBRC->Init(m_pBRC->pthis, &video);
     }
     virtual mfxStatus   Close()
@@ -269,9 +276,15 @@ public:
     }
     virtual mfxStatus   Reset(MfxVideoParam &video, mfxI32 )
     {
+        m_packBitsteams.resize(video.m_ext.PerPackOutput.MaxNumRepack+1);
+        for (uint32_t i = 0; i < m_packBitsteams.size(); ++i)
+        {
+            m_packBitsteams[i].resize(GetMinBsSize(video));
+        }
+
         return m_pBRC->Reset(m_pBRC->pthis,&video);
     }
-    virtual mfxBRCStatus PostPackFrame(MfxVideoParam & par, VideoCORE * core, Task &task, std::vector<std::vector<mfxU8>> & packBitsteams, mfxI32 bitsEncodedFrame, mfxI32 , mfxI32 )
+    virtual mfxBRCStatus PostPackFrame(MfxVideoParam & par, VideoCORE * core, Task &task, mfxI32 bitsEncodedFrame, mfxI32 , mfxI32 )
     {
         mfxBRCFrameParam frame_par  = {};
         mfxBRCFrameCtrl  frame_ctrl = {};
@@ -304,18 +317,18 @@ public:
                 MFX_CHECK(codedFrame.Y, MFX_ERR_LOCK_MEMORY);
 
                 mfxSize roi = {(int32_t)task.m_bsDataLength, 1};
-                FastCopy::Copy(packBitsteams[0].data(), task.m_bsDataLength, codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
+                FastCopy::Copy(m_packBitsteams[0].data(), task.m_bsDataLength, codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
 
                 sts = core->UnlockFrame(task.m_midBs, &codedFrame);
                 MFX_CHECK_STS(sts);
             }
 
-            bitstreams[0].Data = packBitsteams[0].data();
-            bitstreams[0].MaxLength = packBitsteams[0].size();
+            bitstreams[0].Data = m_packBitsteams[0].data();
+            bitstreams[0].MaxLength = m_packBitsteams[0].size();
             bitstreams[0].DataLength = task.m_bsDataLength;
             packOut.Bitstream[0] = &bitstreams[0];
 
-            for (uint32_t i = 0; i < par.m_ext.PerPackOutput.MaxNumRepack; ++i)
+            for (uint32_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak; ++i)
             {
                 surfaces[i+1].Info = par.mfx.FrameInfo;
                 surfaces[i+1].Data.MemId = task.m_midsRec_for_pak[i];
@@ -327,15 +340,15 @@ public:
                     MFX_CHECK(codedFrame.Y, MFX_ERR_LOCK_MEMORY);
 
                     mfxSize roi = {(int32_t)task.m_pakBsSizes[i], 1};
-                    FastCopy::Copy(packBitsteams[i+1].data(), task.m_pakBsSizes[i], codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
+                    FastCopy::Copy(m_packBitsteams[i+1].data(), task.m_pakBsSizes[i], codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
 
                     sts = core->UnlockFrame(task.m_midBs_for_pak[i], &codedFrame);
                     MFX_CHECK_STS(sts);
                 }
 
-                bitstreams[i+1].Data = packBitsteams[i].data();
-                bitstreams[i+1].MaxLength = packBitsteams[i].size();
-                bitstreams[i+1].DataLength = task.m_pakBsSizes[i];
+                bitstreams[i+1].Data = m_packBitsteams[i+1].data();
+                bitstreams[i+1].MaxLength = m_packBitsteams[i+1].size();
+                bitstreams[i+1].DataLength = task.m_pakBsSizes[i+1];
                 packOut.Bitstream[i+1] = &bitstreams[i+1];
 
             }
@@ -349,9 +362,13 @@ public:
         mfxStatus sts = m_pBRC->Update(m_pBRC->pthis, &frame_par, &frame_ctrl, &frame_sts);
         MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
 
-        m_minSize = frame_sts.MinFrameSize;
+        if (par.m_ext.PerPackOutput.MaxNumRepack)
+        {
+            MFX_CHECK((MFX_DEFAULT_ENCODE_RESULT == frame_sts.ActualRepakPass) || (frame_sts.ActualRepakPass < task.m_brcFrameCtrl.MaxNumRepak),  MFX_BRC_ERROR);
+            task.m_actualRepakPass = frame_sts.ActualRepakPass;
+        }
 
-        task.m_actualRepakPass = frame_sts.ActualRepakPass;
+        m_minSize = frame_sts.MinFrameSize;
 
         switch (frame_sts.BRCStatus)
         {
@@ -403,6 +420,8 @@ private:
     mfxU32      m_minSize;
     mfxExtBRC * m_pBRC;
     mfxExtBRC   m_BRCLocal;
+
+    std::vector<std::vector<mfxU8>> m_packBitsteams;
 
 protected:
     void InitFramePar(Task &task, mfxBRCFrameParam & frame_par)

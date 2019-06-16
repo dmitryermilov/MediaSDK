@@ -201,9 +201,6 @@ protected:
     bool                            m_bInit;
     mfxStatus                       m_runtimeErr;
     BrcIface*                       m_brc;
-
-    std::vector<std::vector<mfxU8>> m_packBs;
-
 };
 
 } //MfxHwH265Encode

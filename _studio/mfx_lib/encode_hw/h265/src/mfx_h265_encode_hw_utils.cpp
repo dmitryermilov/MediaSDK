@@ -3819,5 +3819,40 @@ mfxStatus GetCUQPMapBlockSize(mfxU16 frameWidth, mfxU16 frameHeight,
     return MFX_ERR_NONE;
 }
 
+mfxU32 GetMinBsSize(MfxVideoParam const & par)
+{
+    mfxU32 size = par.mfx.FrameInfo.Width * par.mfx.FrameInfo.Height;
+
+    mfxF64 k = 2.0;
+#if (MFX_VERSION >= 1027)
+    if (par.m_ext.CO3.TargetBitDepthLuma == 10)
+        k = k + 0.3;
+    if (par.m_ext.CO3.TargetChromaFormatPlus1 - 1 == MFX_CHROMAFORMAT_YUV422)
+        k = k + 0.5;
+    else if (par.m_ext.CO3.TargetChromaFormatPlus1 - 1 == MFX_CHROMAFORMAT_YUV444)
+        k = k + 1.5;
+#else
+    if (par.mfx.FrameInfo.BitDepthLuma == 10)
+        k = k + 0.3;
+    if (par.mfx.FrameInfo.ChromaFormat == MFX_CHROMAFORMAT_YUV422)
+        k = k + 0.5;
+    else if (par.mfx.FrameInfo.ChromaFormat == MFX_CHROMAFORMAT_YUV444)
+        k = k + 1.5;
+#endif
+
+    size = (mfxU32)(k*size);
+
+    if (par.mfx.RateControlMethod == MFX_RATECONTROL_CBR && !par.isSWBRC() &&
+        par.mfx.FrameInfo.FrameRateExtD!= 0)
+    {
+        mfxU32 avg_size =  par.TargetKbps * 1000 * par.mfx.FrameInfo.FrameRateExtD / (par.mfx.FrameInfo.FrameRateExtN * 8);
+        if (size < 2*avg_size)
+            size = 2*avg_size;
+    }
+
+    return size;
+
+}
+
 }; //namespace MfxHwH265Encode
 #endif
