@@ -30,6 +30,7 @@
 #include "umc_mutex.h"
 #include "mfx_h265_encode_hw_brc.h"
 #include "mfxvideo++int.h"
+#include "cm_mem_copy.h"
 #include <mfx_task.h>
 
 namespace MfxHwH265Encode
@@ -40,6 +41,7 @@ class MFXVideoENCODEH265_HW : public VideoENCODE
 public:
     MFXVideoENCODEH265_HW(VideoCORE *core, mfxStatus *status)
         : m_core(core)
+        , m_cmCopy(nullptr)
         , m_caps()
         , m_lastTask()
         , m_prevBPEO(0)
@@ -179,6 +181,7 @@ protected:
 
     std::unique_ptr<DriverEncoder>  m_ddi;
     VideoCORE                      *m_core;
+    CmCopyWrapper                  *m_cmCopy;
     MfxVideoParam                   m_vpar;
     ENCODE_CAPS_HEVC                m_caps;
 

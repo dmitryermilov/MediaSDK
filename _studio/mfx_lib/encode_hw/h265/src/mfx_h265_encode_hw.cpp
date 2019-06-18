@@ -25,6 +25,9 @@
 #include <vm_time.h>
 #include "fast_copy.h"
 
+#include "libmfx_core.h"
+#include "libmfx_core_interface.h"
+
 namespace MfxHwH265Encode
 {
 
@@ -213,12 +216,17 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
         m_vpar.m_ext.HEVCParam.PicWidthInLumaSamples,
         m_vpar.m_ext.HEVCParam.PicHeightInLumaSamples);
 
+    m_cmCopy = QueryCoreInterface<CmCopyWrapper>(m_core, MFXICORECMCOPYWRAPPER_GUID);
+    MFX_CHECK_NULL_PTR1(m_cmCopy);
+
+    sts = m_cmCopy->Initialize(m_core->GetHWType());
+    MFX_CHECK_STS(sts);
+
     MFX_CHECK(sts != MFX_ERR_INVALID_VIDEO_PARAM, sts);
     MFX_CHECK(MFX_SUCCEEDED(sts), MFX_ERR_DEVICE_FAILED);
 
     sts = m_ddi->QueryEncodeCaps(m_caps);
     MFX_CHECK(MFX_SUCCEEDED(sts), MFX_ERR_DEVICE_FAILED);
-
 
     mfxExtCodingOptionSPSPPS* pSPSPPS = ExtBuffer::Get(*par);
     sts = LoadSPSPPS(m_vpar, pSPSPPS);
@@ -1144,10 +1152,10 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
         MFX_CHECK_STS(sts);
 
 
-       ENCODE_PACKEDHEADER_DATA* pSEI = m_ddi->PackHeader(*taskForQuery, SUFFIX_SEI_NUT);
-       mfxU32 SEI_len = pSEI && pSEI->DataLength ? pSEI->DataLength  : 0;
-       if ((!m_brc && m_hrd.Enabled()) || m_vpar.Protected)
-           SEI_len = 0;
+        ENCODE_PACKEDHEADER_DATA* pSEI = m_ddi->PackHeader(*taskForQuery, SUFFIX_SEI_NUT);
+        mfxU32 SEI_len = pSEI && pSEI->DataLength ? pSEI->DataLength  : 0;
+        if ((!m_brc && m_hrd.Enabled()) || m_vpar.Protected)
+            SEI_len = 0;
 
         if (m_brc)
         {
@@ -1198,8 +1206,20 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
             if (m_vpar.m_ext.PerPackOutput.MaxNumRepack && (taskForQuery->m_actualRepakPass != MFX_DEFAULT_ENCODE_RESULT))
             {
                 taskForQuery->m_bsDataLength = taskForQuery->m_pakBsSizes[taskForQuery->m_actualRepakPass];
-                taskForQuery->m_avgQP= taskForQuery->m_pakQPs[taskForQuery->m_actualRepakPass];
+                taskForQuery->m_avgQP = taskForQuery->m_pakQPs[taskForQuery->m_actualRepakPass];
                 bsMemid = taskForQuery->m_midBs_for_pak[taskForQuery->m_actualRepakPass];
+
+                mfxHDL srcHDL = {};
+                sts = m_core->GetFrameHDL(taskForQuery->m_midsRec_for_pak[taskForQuery->m_actualRepakPass], &srcHDL);
+                MFX_CHECK_STS(sts);
+
+                mfxHDL dstHDL = {};
+                sts = m_core->GetFrameHDL(taskForQuery->m_midRec, &dstHDL);
+                MFX_CHECK_STS(sts);
+
+                mfxSize roi = {m_vpar.mfx.FrameInfo.Width, m_vpar.mfx.FrameInfo.Height};
+                sts =  m_cmCopy->CopyVideoToVideoMemoryAPI(dstHDL, srcHDL, roi);
+                MFX_CHECK_STS(sts);
             }
 
             mfxFrameData codedFrame = {};
