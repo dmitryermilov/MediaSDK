@@ -632,7 +632,7 @@ mfxStatus CEncodingPipeline::InitMfxEncParams(sInputParams *pInParams)
     // This is for explicit extbrc only. In case of implicit (built-into-library) version - we don't need this extended buffer
     if (pInParams->nExtBRC == EXTBRC_ON && (pInParams->CodecId == MFX_CODEC_HEVC || pInParams->CodecId == MFX_CODEC_AVC))
     {
-       HEVCExtBRC::Create(m_ExtBRC);
+       HEVCExtBRC::Create(m_ExtBRC, m_pMFXAllocator);
        m_EncExtParams.push_back((mfxExtBuffer *)&m_ExtBRC);
     }
 #endif

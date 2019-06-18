@@ -411,6 +411,9 @@ mfxStatus ExtBRC::Init (mfxVideoParam* par)
 {
     mfxStatus sts = MFX_ERR_NONE;
 
+    sts = m_FileWriter.Init("recon.yuv", 1);
+    MSDK_CHECK_STATUS(sts, "m_FileWriter.Init failed");
+
     MFX_CHECK(!m_bInit, MFX_ERR_UNDEFINED_BEHAVIOR);
     sts = m_par.Init(par);
     MFX_CHECK_STS(sts);
@@ -612,8 +615,34 @@ mfxStatus ExtBRC::Update(mfxBRCFrameParam* frame_par, mfxBRCFrameCtrl* frame_ctr
     mfxU16 &brcSts       = status->BRCStatus;
     status->MinFrameSize  = 0;
 
-    // Just for testing purposes
-    status->ActualRepakPass = 1;
+    mfxBRCRepackOutput* repak = (mfxBRCRepackOutput*) GetExtBuffer(frame_par->ExtParam, frame_par->NumExtParam, MFX_EXTBUFF_BRC_REPACK_OUTPUT);
+
+    if (repak)
+    {
+        MSDK_CHECK_POINTER(m_allocator, MFX_ERR_MEMORY_ALLOC);
+        size_t i = 0;
+        while (repak->Reconstruct[i])
+        {
+            if (repak->Reconstruct[i]->Data.MemId)
+            {
+                sts = m_allocator->Lock(m_allocator->pthis, repak->Reconstruct[i]->Data.MemId, &(repak->Reconstruct[i]->Data));
+                MSDK_CHECK_STATUS(sts, "m_allocator->Lock failed");
+            }
+
+            sts = m_FileWriter.WriteNextFrame(repak->Reconstruct[i]);
+            MSDK_CHECK_STATUS(sts, "WriteNextFrame failed");
+
+            if (repak->Reconstruct[i]->Data.MemId)
+            {
+                sts = m_allocator->Unlock(m_allocator->pthis, repak->Reconstruct[i]->Data.MemId, &(repak->Reconstruct[i]->Data));
+                MSDK_CHECK_STATUS(sts, "m_allocator->Unlock failed");
+            }
+            ++i;
+        }
+
+        // Just for testing purposes
+        status->ActualRepakPass = 1;
+    }
 
     //printf("ExtBRC::Update:  m_ctx.encOrder %d , frame_par->EncodedOrder %d, frame_par->NumRecode %d, frame_par->CodedFrameSize %d, qp %d\n", m_ctx.encOrder , frame_par->EncodedOrder, frame_par->NumRecode, frame_par->CodedFrameSize, frame_ctrl->QpY);
 

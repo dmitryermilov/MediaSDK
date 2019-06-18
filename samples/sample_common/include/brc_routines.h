@@ -26,6 +26,8 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #if (MFX_VERSION >= 1024)
 #include "mfxbrc.h"
 
+#include "base_allocator.h"
+
 #ifndef __PIPELINE_ENCODE_BRC_H__
 #define __PIPELINE_ENCODE_BRC_H__
 
@@ -335,11 +337,15 @@ private:
     BRC_Ctx    m_ctx;
     std::unique_ptr<AVGBitrate> m_avg;
 
+    CSmplYUVWriter          m_FileWriter;
+    MFXFrameAllocator*      m_allocator;
+
 public:
-    ExtBRC():
+    ExtBRC(MFXFrameAllocator* alloc = nullptr):
         m_par(),
         m_hrd(),
-        m_bInit(false)
+        m_bInit(false),
+        m_allocator(alloc)
     {
         memset(&m_ctx, 0, sizeof(m_ctx));
 
@@ -380,10 +386,10 @@ namespace HEVCExtBRC
         MFX_CHECK_NULL_PTR1(pthis);
         return ((ExtBRC*)pthis)->Update(par,ctrl, status) ;
     }
-    inline mfxStatus Create(mfxExtBRC & m_BRC)
+    inline mfxStatus Create(mfxExtBRC & m_BRC, MFXFrameAllocator* alloc = nullptr)
     {
         MFX_CHECK(m_BRC.pthis == NULL, MFX_ERR_UNDEFINED_BEHAVIOR);
-        m_BRC.pthis = new ExtBRC;
+        m_BRC.pthis = new ExtBRC(alloc);
         m_BRC.Init = Init;
         m_BRC.Reset = Reset;
         m_BRC.Close = Close;

@@ -295,6 +295,11 @@ public:
         InitFramePar(task,frame_par);
         frame_par.CodedFrameSize = bitsEncodedFrame/8;  // Size of frame in bytes after encoding
 
+        mfxStatus sts = MFX_ERR_NONE;
+
+        mfxFrameSurface1 surfaces[8];
+        Zero(surfaces);
+
         if (par.m_ext.PerPackOutput.MaxNumRepack)
         {
             mfxFrameData codedFrame = {};
@@ -303,53 +308,38 @@ public:
             packOut.Header.BufferId = MFX_EXTBUFF_BRC_REPACK_OUTPUT;
             packOut.Header.BufferSz = sizeof(mfxBRCRepackOutput);
 
-            mfxFrameSurface1 surfaces[8];
-            Zero(surfaces);
-            surfaces[0].Info = par.mfx.FrameInfo;
-            surfaces[0].Data.MemId = task.m_midRec;
-            packOut.Reconstruct[0] = &surfaces[0];
-
             mfxBitstream bitstreams[8];
             Zero(bitstreams);
+
+            for (uint32_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak + 1u; ++i)
             {
-                mfxStatus sts = core->LockFrame(task.m_midBs, &codedFrame);
-                MFX_CHECK_STS(sts);
-                MFX_CHECK(codedFrame.Y, MFX_ERR_LOCK_MEMORY);
-
-                mfxSize roi = {(int32_t)task.m_bsDataLength, 1};
-                FastCopy::Copy(m_packBitsteams[0].data(), task.m_bsDataLength, codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
-
-                sts = core->UnlockFrame(task.m_midBs, &codedFrame);
-                MFX_CHECK_STS(sts);
-            }
-
-            bitstreams[0].Data = m_packBitsteams[0].data();
-            bitstreams[0].MaxLength = m_packBitsteams[0].size();
-            bitstreams[0].DataLength = task.m_bsDataLength;
-            packOut.Bitstream[0] = &bitstreams[0];
-
-            for (uint32_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak; ++i)
-            {
-                surfaces[i+1].Info = par.mfx.FrameInfo;
-                surfaces[i+1].Data.MemId = task.m_midsRec_for_pak[i];
-                packOut.Reconstruct[i+1] = &surfaces[i+1];
-
+                surfaces[i].Info = par.mfx.FrameInfo;
+                if (par.IOPattern == MFX_IOPATTERN_IN_VIDEO_MEMORY)
                 {
-                    mfxStatus sts = core->LockFrame(task.m_midBs_for_pak[i], &codedFrame);
-                    MFX_CHECK_STS(sts);
-                    MFX_CHECK(codedFrame.Y, MFX_ERR_LOCK_MEMORY);
-
-                    mfxSize roi = {(int32_t)task.m_pakBsSizes[i], 1};
-                    FastCopy::Copy(m_packBitsteams[i+1].data(), task.m_pakBsSizes[i], codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
-
-                    sts = core->UnlockFrame(task.m_midBs_for_pak[i], &codedFrame);
-                    MFX_CHECK_STS(sts);
+                    surfaces[i].Data.MemId = core->MapIdx(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1]);
+                }
+                else if (par.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY)
+                {
+                    sts = core->LockFrame(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1], &surfaces[i].Data);
+                    MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
                 }
 
-                bitstreams[i+1].Data = m_packBitsteams[i+1].data();
-                bitstreams[i+1].MaxLength = m_packBitsteams[i+1].size();
-                bitstreams[i+1].DataLength = task.m_pakBsSizes[i+1];
-                packOut.Bitstream[i+1] = &bitstreams[i+1];
+                packOut.Reconstruct[i] = &surfaces[i];
+
+                sts = core->LockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
+                MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
+                MFX_CHECK(codedFrame.Y, MFX_BRC_ERROR);
+
+                mfxSize roi = {i == 0 ? (int32_t)task.m_bsDataLength : (int32_t)task.m_pakBsSizes[i-1], 1};
+                FastCopy::Copy(m_packBitsteams[i].data(), i == 0 ? task.m_bsDataLength : task.m_pakBsSizes[i-1], codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
+
+                sts = core->UnlockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
+                MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
+
+                bitstreams[i].Data = m_packBitsteams[i].data();
+                bitstreams[i].MaxLength = m_packBitsteams[i].size();
+                bitstreams[i].DataLength = (i == 0) ? (int32_t)task.m_bsDataLength : (int32_t)task.m_pakBsSizes[i-1];
+                packOut.Bitstream[i] = &bitstreams[i];
 
             }
 
@@ -359,11 +349,20 @@ public:
             frame_par.ExtParam = (mfxExtBuffer**) &ExtBuffer[0];
         }
 
-        mfxStatus sts = m_pBRC->Update(m_pBRC->pthis, &frame_par, &frame_ctrl, &frame_sts);
+        sts = m_pBRC->Update(m_pBRC->pthis, &frame_par, &frame_ctrl, &frame_sts);
         MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
 
         if (par.m_ext.PerPackOutput.MaxNumRepack)
         {
+            if (par.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY)
+            {
+                for (uint32_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak + 1u; ++i)
+                {
+                    sts = core->UnlockFrame(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1], &surfaces[i].Data);
+                    MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
+                }
+            }
+
             MFX_CHECK((MFX_DEFAULT_ENCODE_RESULT == frame_sts.ActualRepakPass) || (frame_sts.ActualRepakPass < task.m_brcFrameCtrl.MaxNumRepak),  MFX_BRC_ERROR);
             task.m_actualRepakPass = frame_sts.ActualRepakPass;
         }

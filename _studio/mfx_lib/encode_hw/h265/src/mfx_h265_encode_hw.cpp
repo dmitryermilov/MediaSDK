@@ -301,7 +301,15 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
         request.Info.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
     }
 #endif
-    //For MMCD encoder bind flag is required.
+    // For MMCD encoder bind flag is required
+    if (m_vpar.m_ext.PerPackOutput.MaxNumRepack)
+    {
+        // If app wants external video memory then we'll provide reconstructed surfaces in video memory
+        request.Type  = (m_vpar.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY) ? MFX_MEMTYPE_D3D_INT : MFX_MEMTYPE_D3D_EXT;
+    }
+    else
+        request.Type = MFX_MEMTYPE_D3D_INT;
+
     request.Type |= MFX_MEMTYPE_VIDEO_MEMORY_ENCODER_TARGET;
     sts = m_rec.Alloc(m_core, request, false);
     MFX_CHECK_STS(sts);
@@ -972,9 +980,7 @@ mfxStatus MFXVideoENCODEH265_HW::PrepareTask(Task& input_task)
     if (task->m_surf)
     {
         task->m_idxRaw  = (mfxU8)FindFreeResourceIndex(m_raw);
-        MFX_CHECK(task->m_idxRaw != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midRaw  = AcquireResource(m_raw,  task->m_idxRaw);
-        MFX_CHECK(task->m_midRaw, MFX_ERR_UNDEFINED_BEHAVIOR);
 
         task->m_idxRec  = (mfxU8)FindFreeResourceIndex(m_rec);
         MFX_CHECK(task->m_idxRec != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
