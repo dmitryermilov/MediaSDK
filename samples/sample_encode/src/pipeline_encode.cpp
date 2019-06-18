@@ -740,8 +740,11 @@ mfxStatus CEncodingPipeline::InitMfxEncParams(sInputParams *pInParams)
         m_EncExtParams.push_back((mfxExtBuffer*)&m_VideoSignalInfo);
     }
 
-    m_MultiPAK.MaxNumRepackPasses = 3;
-    m_EncExtParams.push_back((mfxExtBuffer *)&m_MultiPAK);
+    if (pInParams->nExtBRC)
+    {
+        m_MultiPAK.MaxNumRepackPasses = 3;
+        m_EncExtParams.push_back((mfxExtBuffer *)&m_MultiPAK);
+    }
 
     if (!m_EncExtParams.empty())
     {

@@ -2482,6 +2482,8 @@ mfxStatus CheckVideoParam(MfxVideoParam& par, ENCODE_CAPS_HEVC const & caps, boo
 
     changed += CheckTriStateOption(par.m_ext.DDI.QpAdjust);
 
+    invalid += (par.m_ext.MultiPAK.MaxNumRepackPasses && (par.IOPattern != MFX_IOPATTERN_IN_VIDEO_MEMORY));
+
     if (sts == MFX_ERR_NONE && changed)
         sts = MFX_WRN_INCOMPATIBLE_VIDEO_PARAM;
 
@@ -2581,6 +2583,9 @@ void SetDefaults(
         par.mfx.CodecProfile = mfxU16((par.mfx.FrameInfo.BitDepthLuma > 8 || par.mfx.FrameInfo.FourCC == MFX_FOURCC_P010) ? MFX_PROFILE_HEVC_MAIN10 : MFX_PROFILE_HEVC_MAIN);
     }
 #endif
+
+    if (par.m_ext.MultiPAK.MaxNumRepackPasses)
+        par.AsyncDepth = 1;
 
     if (!par.AsyncDepth)
         par.AsyncDepth = 5;
