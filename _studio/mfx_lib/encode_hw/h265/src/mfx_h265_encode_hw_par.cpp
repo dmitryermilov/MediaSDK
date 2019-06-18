@@ -2130,7 +2130,7 @@ mfxStatus CheckVideoParam(MfxVideoParam& par, ENCODE_CAPS_HEVC const & caps, boo
             || (par.mfx.NumRefFrame && minRefForPyramid(par.mfx.GopRefDist, par.isField()) > par.mfx.NumRefFrame)))
     {
         if (par.mfx.EncodedOrder
-         && par.mfx.NumRefFrame > 2 
+         && par.mfx.NumRefFrame > 2
          && minRefForPyramid(par.mfx.GopRefDist, par.isField()) > par.mfx.NumRefFrame)
         {
             par.bNonStandardReord = true;  // let's allow this mode in encoding order (may be special B pyr is used)
@@ -2146,7 +2146,7 @@ mfxStatus CheckVideoParam(MfxVideoParam& par, ENCODE_CAPS_HEVC const & caps, boo
     {
         if (par.mfx.EncodedOrder && par.isField() && par.mfx.NumRefFrame > 1 && par.mfx.NumRefFrame < 4)
         {
-            par.bNonStandardReord = true;  // let's allow this mode in encoding order 
+            par.bNonStandardReord = true;  // let's allow this mode in encoding order
         }
         else
         {

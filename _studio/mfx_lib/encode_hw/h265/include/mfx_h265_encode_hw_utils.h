@@ -387,7 +387,7 @@ struct Task : DpbFrame
     mfxU32            m_pakBsSizes[8]                 = {};
     mfxU32            m_pakQPs[8]                     = {};
 
-    uint32_t          m_actualRepakPass               = MFX_DEFAULT_ENCODE_RESULT;
+    uint32_t          m_selectedBistream              = 0;
 };
 
 enum
@@ -438,7 +438,7 @@ namespace ExtBuffer
          MFX_EXTBUFF_ENCODER_ROI,
          MFX_EXTBUFF_DIRTY_RECTANGLES,
          MFX_EXTBUFF_ENCODED_FRAME_INFO,
-         MFX_EXTBUFF_REPACK_OUTPUT
+         MFX_EXTBUFF_BRC_MULTIPAK
     };
 
     template<class T> struct ExtBufferMap {};
@@ -468,7 +468,7 @@ namespace ExtBuffer
         EXTBUF(mfxExtPredWeightTable,       MFX_EXTBUFF_PRED_WEIGHT_TABLE);
 #endif //defined(MFX_ENABLE_HEVCE_WEIGHTED_PREDICTION)
         EXTBUF(mfxExtAVCEncodedFrameInfo,   MFX_EXTBUFF_ENCODED_FRAME_INFO);
-        EXTBUF(mfxExtPerPackOutput,         MFX_EXTBUFF_REPACK_OUTPUT);
+        EXTBUF(mfxBRCMultiPAKParam,         MFX_EXTBUFF_BRC_MULTIPAK);
 
     #undef EXTBUF
 
@@ -576,9 +576,9 @@ namespace ExtBuffer
         MFX_COPY_FIELD(MBPerSec);
     }
 
-    inline void  CopySupportedParams(mfxExtPerPackOutput& buf_dst, mfxExtPerPackOutput& buf_src)
+    inline void  CopySupportedParams(mfxBRCMultiPAKParam& buf_dst, mfxBRCMultiPAKParam& buf_src)
     {
-        MFX_COPY_FIELD(MaxNumRepack);
+        MFX_COPY_FIELD(MaxNumRepackPasses);
     }
 
     template<class T> void Init(T& buf)
@@ -805,7 +805,7 @@ public:
         mfxExtEncoderROI            ROI;
         mfxExtDirtyRect             DirtyRect;
         mfxExtEncoderResetOption    ResetOpt;
-        mfxExtPerPackOutput         PerPackOutput;
+        mfxBRCMultiPAKParam         MultiPAK;
         mfxExtBuffer *              m_extParam[SIZE_OF_ARRAY(ExtBuffer::allowed_buffers)];
     } m_ext;
 

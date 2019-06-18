@@ -1806,7 +1806,7 @@ mfxStatus VAAPIEncoder::Execute(Task const & task, mfxHDLPair pair)
             MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassFrameSize(task, m_vaDisplay, m_vaContextEncode, repakId), MFX_ERR_DEVICE_FAILED);
         }
 
-        if (m_videoParam.m_ext.PerPackOutput.MaxNumRepack)
+        if (m_videoParam.m_ext.MultiPAK.MaxNumRepackPasses)
         {
             VABufferID &pakOutputId = VABufferNew(VABID_REPACK_OUTPOUT, 0);
             MFX_CHECK_WITH_ASSERT(MFX_ERR_NONE == SetMultiPassRePAKOutput(task, m_reconQueue, m_bsQueue, m_vaDisplay, m_vaContextEncode, pakOutputId), MFX_ERR_DEVICE_FAILED);
@@ -2052,7 +2052,7 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
                 // Sync FEI output buffers
                 MFX_CHECK_WITH_ASSERT(PostQueryExtraStage(task, codedStatus) == MFX_ERR_NONE, MFX_ERR_DEVICE_FAILED);
 
-                if (m_videoParam.m_ext.PerPackOutput.MaxNumRepack)
+                if (m_videoParam.m_ext.MultiPAK.MaxNumRepackPasses)
                 {
                     for (size_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak; ++i)
                     {

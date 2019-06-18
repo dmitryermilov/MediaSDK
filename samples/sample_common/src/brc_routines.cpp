@@ -615,33 +615,32 @@ mfxStatus ExtBRC::Update(mfxBRCFrameParam* frame_par, mfxBRCFrameCtrl* frame_ctr
     mfxU16 &brcSts       = status->BRCStatus;
     status->MinFrameSize  = 0;
 
-    mfxBRCRepackOutput* repak = (mfxBRCRepackOutput*) GetExtBuffer(frame_par->ExtParam, frame_par->NumExtParam, MFX_EXTBUFF_BRC_REPACK_OUTPUT);
+    mfxBRCMultiPAKOutput* pakOutput = (mfxBRCMultiPAKOutput*) GetExtBuffer(frame_par->ExtParam, frame_par->NumExtParam, MFX_EXTBUFF_BRC_PAK_OUTPUT);
 
-    if (repak)
+    if (pakOutput)
     {
         MSDK_CHECK_POINTER(m_allocator, MFX_ERR_MEMORY_ALLOC);
-        size_t i = 0;
-        while (repak->Reconstruct[i])
+#if 0
+        for (size_t i = 0; i < pakOutput->NumPAKPasses; ++i)
         {
-            if (repak->Reconstruct[i]->Data.MemId)
+            if (pakOutput->Reconstruct[i]->Data.MemId)
             {
-                sts = m_allocator->Lock(m_allocator->pthis, repak->Reconstruct[i]->Data.MemId, &(repak->Reconstruct[i]->Data));
+                sts = m_allocator->Lock(m_allocator->pthis, pakOutput->Reconstruct[i]->Data.MemId, &(pakOutput->Reconstruct[i]->Data));
                 MSDK_CHECK_STATUS(sts, "m_allocator->Lock failed");
             }
 
-            sts = m_FileWriter.WriteNextFrame(repak->Reconstruct[i]);
+            sts = m_FileWriter.WriteNextFrame(pakOutput->Reconstruct[i]);
             MSDK_CHECK_STATUS(sts, "WriteNextFrame failed");
 
-            if (repak->Reconstruct[i]->Data.MemId)
+            if (pakOutput->Reconstruct[i]->Data.MemId)
             {
-                sts = m_allocator->Unlock(m_allocator->pthis, repak->Reconstruct[i]->Data.MemId, &(repak->Reconstruct[i]->Data));
+                sts = m_allocator->Unlock(m_allocator->pthis, pakOutput->Reconstruct[i]->Data.MemId, &(pakOutput->Reconstruct[i]->Data));
                 MSDK_CHECK_STATUS(sts, "m_allocator->Unlock failed");
             }
-            ++i;
         }
-
+#endif
         // Just for testing purposes
-        status->ActualRepakPass = 1;
+        status->SelectedBistream = 1;
     }
 
     //printf("ExtBRC::Update:  m_ctx.encOrder %d , frame_par->EncodedOrder %d, frame_par->NumRecode %d, frame_par->CodedFrameSize %d, qp %d\n", m_ctx.encOrder , frame_par->EncodedOrder, frame_par->NumRecode, frame_par->CodedFrameSize, frame_ctrl->QpY);

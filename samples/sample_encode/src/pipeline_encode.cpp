@@ -740,8 +740,8 @@ mfxStatus CEncodingPipeline::InitMfxEncParams(sInputParams *pInParams)
         m_EncExtParams.push_back((mfxExtBuffer*)&m_VideoSignalInfo);
     }
 
-    m_PerPackOutput.MaxNumRepack = 4;
-    m_EncExtParams.push_back((mfxExtBuffer *)&m_PerPackOutput);
+    m_MultiPAK.MaxNumRepackPasses = 3;
+    m_EncExtParams.push_back((mfxExtBuffer *)&m_MultiPAK);
 
     if (!m_EncExtParams.empty())
     {
@@ -1253,9 +1253,9 @@ CEncodingPipeline::CEncodingPipeline()
     m_ExtBRC.Header.BufferSz = sizeof(m_ExtBRC);
 #endif
 
-    MSDK_ZERO_MEMORY(m_PerPackOutput);
-    m_PerPackOutput.Header.BufferId = MFX_EXTBUFF_REPACK_OUTPUT;
-    m_PerPackOutput.Header.BufferSz = sizeof(m_PerPackOutput);
+    MSDK_ZERO_MEMORY(m_MultiPAK);
+    m_MultiPAK.Header.BufferId = MFX_EXTBUFF_BRC_MULTIPAK;
+    m_MultiPAK.Header.BufferSz = sizeof(m_MultiPAK);
 
     m_hwdev = NULL;
 

@@ -849,7 +849,7 @@ void MfxVideoParam::Construct(mfxVideoParam const & par)
     ExtBuffer::Construct(par, m_ext.extBRC, m_ext.m_extParam, base.NumExtParam);
     ExtBuffer::Construct(par, m_ext.ROI, m_ext.m_extParam, base.NumExtParam);
     ExtBuffer::Construct(par, m_ext.DirtyRect, m_ext.m_extParam, base.NumExtParam);
-    ExtBuffer::Construct(par, m_ext.PerPackOutput, m_ext.m_extParam, base.NumExtParam);
+    ExtBuffer::Construct(par, m_ext.MultiPAK, m_ext.m_extParam, base.NumExtParam);
 }
 
 mfxStatus MfxVideoParam::FillPar(mfxVideoParam& par, bool query)

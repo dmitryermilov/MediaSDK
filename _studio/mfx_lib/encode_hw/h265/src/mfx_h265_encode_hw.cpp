@@ -50,7 +50,7 @@ inline mfxStatus GetWorstSts(mfxStatus sts1, mfxStatus sts2)
 
 mfxU16 MaxRec(MfxVideoParam const & par)
 {
-    return par.AsyncDepth + par.mfx.NumRefFrame + ((par.AsyncDepth > 1)? 1: 0) + (par.m_ext.PerPackOutput.MaxNumRepack * par.AsyncDepth);
+    return par.AsyncDepth + par.mfx.NumRefFrame + ((par.AsyncDepth > 1)? 1: 0) + (par.m_ext.MultiPAK.MaxNumRepackPasses * par.AsyncDepth);
 }
 mfxU16 NumFramesForReord(MfxVideoParam const & par)
 {
@@ -68,7 +68,7 @@ mfxU16 MaxRaw(MfxVideoParam const & par)
 
 mfxU16 MaxBs(MfxVideoParam const & par)
 {
-    return par.AsyncDepth + ((par.AsyncDepth > 1)? 1: 0) + (par.m_ext.PerPackOutput.MaxNumRepack * par.AsyncDepth); // added buffered task between submit into ddi and query
+    return par.AsyncDepth + ((par.AsyncDepth > 1)? 1: 0) + (par.m_ext.MultiPAK.MaxNumRepackPasses * par.AsyncDepth); // added buffered task between submit into ddi and query
 }
 mfxU32 GetBsSize(mfxFrameInfo& info)
 {
@@ -310,7 +310,7 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
     }
 #endif
     // For MMCD encoder bind flag is required
-    if (m_vpar.m_ext.PerPackOutput.MaxNumRepack)
+    if (m_vpar.m_ext.MultiPAK.MaxNumRepackPasses)
     {
         // If app wants external video memory then we'll provide reconstructed surfaces in video memory
         request.Type  = (m_vpar.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY) ? MFX_MEMTYPE_D3D_INT : MFX_MEMTYPE_D3D_EXT;
@@ -994,7 +994,7 @@ mfxStatus MFXVideoENCODEH265_HW::PrepareTask(Task& input_task)
         MFX_CHECK(task->m_idxRec != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midRec  = AcquireResource(m_rec,  task->m_idxRec);
         MFX_CHECK(task->m_midRec, MFX_ERR_UNDEFINED_BEHAVIOR);
-        for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+        for (size_t i = 0; i < m_vpar.m_ext.MultiPAK.MaxNumRepackPasses; ++i)
         {
             task->m_idxsRec_for_pak[i] = (mfxU8)FindFreeResourceIndex(m_rec);
             MFX_CHECK(task->m_idxsRec_for_pak[i] != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
@@ -1006,7 +1006,7 @@ mfxStatus MFXVideoENCODEH265_HW::PrepareTask(Task& input_task)
         MFX_CHECK(task->m_idxBs  != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
         task->m_midBs   = AcquireResource(m_bs,   task->m_idxBs);
 
-        for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+        for (size_t i = 0; i < m_vpar.m_ext.MultiPAK.MaxNumRepackPasses; ++i)
         {
             task->m_idxsBs_for_pak[i]   = (mfxU8)FindFreeResourceIndex(m_bs);
             MFX_CHECK(task->m_idxsBs_for_pak[i]  != IDX_INVALID, MFX_ERR_UNDEFINED_BEHAVIOR);
@@ -1203,14 +1203,15 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
         if (taskForQuery->m_bsDataLength)
         {
             mfxMemId bsMemid = taskForQuery->m_midBs;
-            if (m_vpar.m_ext.PerPackOutput.MaxNumRepack && (taskForQuery->m_actualRepakPass != MFX_DEFAULT_ENCODE_RESULT))
+            if (m_vpar.m_ext.MultiPAK.MaxNumRepackPasses && (taskForQuery->m_selectedBistream != 0))
             {
-                taskForQuery->m_bsDataLength = taskForQuery->m_pakBsSizes[taskForQuery->m_actualRepakPass];
-                taskForQuery->m_avgQP = taskForQuery->m_pakQPs[taskForQuery->m_actualRepakPass];
-                bsMemid = taskForQuery->m_midBs_for_pak[taskForQuery->m_actualRepakPass];
+                uint32_t rePAKPass = taskForQuery->m_selectedBistream - 1;
+                taskForQuery->m_bsDataLength = taskForQuery->m_pakBsSizes[rePAKPass];
+                taskForQuery->m_avgQP = taskForQuery->m_pakQPs[rePAKPass];
+                bsMemid = taskForQuery->m_midBs_for_pak[rePAKPass];
 
                 mfxHDL srcHDL = {};
-                sts = m_core->GetFrameHDL(taskForQuery->m_midsRec_for_pak[taskForQuery->m_actualRepakPass], &srcHDL);
+                sts = m_core->GetFrameHDL(taskForQuery->m_midsRec_for_pak[rePAKPass], &srcHDL);
                 MFX_CHECK_STS(sts);
 
                 mfxHDL dstHDL = {};
@@ -1310,7 +1311,7 @@ mfxStatus  MFXVideoENCODEH265_HW::FreeTask(Task &task)
         ReleaseResource(m_bs,  task.m_midBs);
         task.m_midBs = 0;
     }
-    for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+    for (size_t i = 0; i < m_vpar.m_ext.MultiPAK.MaxNumRepackPasses; ++i)
     {
         if (task.m_midBs_for_pak[i])
         {
@@ -1340,7 +1341,7 @@ mfxStatus  MFXVideoENCODEH265_HW::FreeTask(Task &task)
         }
     }
 
-    for (size_t i = 0; i < m_vpar.m_ext.PerPackOutput.MaxNumRepack; ++i)
+    for (size_t i = 0; i < m_vpar.m_ext.MultiPAK.MaxNumRepackPasses; ++i)
     {
         if (task.m_midsRec_for_pak[i])
         {

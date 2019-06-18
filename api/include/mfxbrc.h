@@ -29,8 +29,8 @@ extern "C"
 
 /* Extended Buffer Ids */
 enum {
-    MFX_EXTBUFF_BRC                = MFX_MAKEFOURCC('E','B','R','C'),
-    MFX_EXTBUFF_BRC_REPACK_OUTPUT  = MFX_MAKEFOURCC('E','B','R','O')
+    MFX_EXTBUFF_BRC            = MFX_MAKEFOURCC('E','B','R','C'),
+    MFX_EXTBUFF_BRC_PAK_OUTPUT = MFX_MAKEFOURCC('E','B','R','O')
 };
 
 typedef struct {
@@ -78,14 +78,10 @@ enum {
     MFX_BRC_PANIC_SMALL_FRAME = 4  // Coded frame is too small, no further recoding possible - required padding to MinFrameSize
 };
 
-enum {
-    MFX_DEFAULT_ENCODE_RESULT = 0xFFFF
-};
-
 typedef struct {
     mfxU32 MinFrameSize;    // Size in bytes, coded frame must be padded to when Status = MFX_BRC_PANIC_SMALL_FRAME
     mfxU16 BRCStatus;       // See BRCStatus enumerator
-    mfxU16 ActualRepakPass;
+    mfxU16 SelectedBistream;
     mfxU16 reserved[24];
     mfxHDL reserved1;
 } mfxBRCFrameStatus;
@@ -121,9 +117,10 @@ typedef struct {
 
 typedef struct {
     mfxExtBuffer           Header;
-    mfxFrameSurface1*      Reconstruct[8];
+    mfxU16                 NumPAKPasses;
+    mfxFrameSurface1*      Reconstruct[8]; // 1 ENCPAK + 7 repacks
     mfxBitstream*          Bitstream[8];
-} mfxBRCRepackOutput;
+} mfxBRCMultiPAKOutput;
 
 #ifdef __cplusplus
 } // extern "C"

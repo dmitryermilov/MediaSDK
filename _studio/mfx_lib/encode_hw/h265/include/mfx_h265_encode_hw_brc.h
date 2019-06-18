@@ -258,7 +258,7 @@ public:
             m_pBRC = &m_BRCLocal;
         }
 
-        m_packBitsteams.resize(video.m_ext.PerPackOutput.MaxNumRepack+1);
+        m_packBitsteams.resize(video.m_ext.MultiPAK.MaxNumRepackPasses+1);
         for (uint32_t i = 0; i < m_packBitsteams.size(); ++i)
         {
             m_packBitsteams[i].resize(GetMinBsSize(video));
@@ -276,7 +276,7 @@ public:
     }
     virtual mfxStatus   Reset(MfxVideoParam &video, mfxI32 )
     {
-        m_packBitsteams.resize(video.m_ext.PerPackOutput.MaxNumRepack+1);
+        m_packBitsteams.resize(video.m_ext.MultiPAK.MaxNumRepackPasses+1);
         for (uint32_t i = 0; i < m_packBitsteams.size(); ++i)
         {
             m_packBitsteams[i].resize(GetMinBsSize(video));
@@ -289,7 +289,7 @@ public:
         mfxBRCFrameParam frame_par  = {};
         mfxBRCFrameCtrl  frame_ctrl = {};
         mfxBRCFrameStatus frame_sts = {};
-        frame_sts.ActualRepakPass = MFX_DEFAULT_ENCODE_RESULT;
+        frame_sts.SelectedBistream = 0;
 
         frame_ctrl.QpY = task.m_qpY;
         InitFramePar(task,frame_par);
@@ -300,13 +300,13 @@ public:
         mfxFrameSurface1 surfaces[8];
         Zero(surfaces);
 
-        if (par.m_ext.PerPackOutput.MaxNumRepack)
+        if (par.m_ext.MultiPAK.MaxNumRepackPasses)
         {
             mfxFrameData codedFrame = {};
 
-            mfxBRCRepackOutput packOut = {};
-            packOut.Header.BufferId = MFX_EXTBUFF_BRC_REPACK_OUTPUT;
-            packOut.Header.BufferSz = sizeof(mfxBRCRepackOutput);
+            mfxBRCMultiPAKOutput pakOut = {};
+            pakOut.Header.BufferId = MFX_EXTBUFF_BRC_PAK_OUTPUT;
+            pakOut.Header.BufferSz = sizeof(mfxBRCMultiPAKOutput);
 
             mfxBitstream bitstreams[8];
             Zero(bitstreams);
@@ -324,7 +324,7 @@ public:
                     MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
                 }
 
-                packOut.Reconstruct[i] = &surfaces[i];
+                pakOut.Reconstruct[i] = &surfaces[i];
 
                 sts = core->LockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
                 MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
@@ -339,12 +339,11 @@ public:
                 bitstreams[i].Data = m_packBitsteams[i].data();
                 bitstreams[i].MaxLength = m_packBitsteams[i].size();
                 bitstreams[i].DataLength = (i == 0) ? (int32_t)task.m_bsDataLength : (int32_t)task.m_pakBsSizes[i-1];
-                packOut.Bitstream[i] = &bitstreams[i];
-
+                pakOut.Bitstream[i] = &bitstreams[i];
             }
 
             mfxExtBuffer* ExtBuffer[1];
-            ExtBuffer[0] = (mfxExtBuffer*) &packOut;
+            ExtBuffer[0] = (mfxExtBuffer*) &pakOut;
             frame_par.NumExtParam = 1;
             frame_par.ExtParam = (mfxExtBuffer**) &ExtBuffer[0];
         }
@@ -352,7 +351,7 @@ public:
         sts = m_pBRC->Update(m_pBRC->pthis, &frame_par, &frame_ctrl, &frame_sts);
         MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
 
-        if (par.m_ext.PerPackOutput.MaxNumRepack)
+        if (par.m_ext.MultiPAK.MaxNumRepackPasses)
         {
             if (par.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY)
             {
@@ -363,8 +362,8 @@ public:
                 }
             }
 
-            MFX_CHECK((MFX_DEFAULT_ENCODE_RESULT == frame_sts.ActualRepakPass) || (frame_sts.ActualRepakPass < task.m_brcFrameCtrl.MaxNumRepak),  MFX_BRC_ERROR);
-            task.m_actualRepakPass = frame_sts.ActualRepakPass;
+            MFX_CHECK((frame_sts.SelectedBistream <= task.m_brcFrameCtrl.MaxNumRepak),  MFX_BRC_ERROR);
+            task.m_selectedBistream = frame_sts.SelectedBistream;
         }
 
         m_minSize = frame_sts.MinFrameSize;

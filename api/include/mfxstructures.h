@@ -909,7 +909,7 @@ enum {
     MFX_EXTBUFF_MPEG2_QUANT_MATRIX              = MFX_MAKEFOURCC('M','2','Q','M'),
     MFX_EXTBUFF_TASK_DEPENDENCY                 = MFX_MAKEFOURCC('S','Y','N','C'),
 #endif
-    MFX_EXTBUFF_REPACK_OUTPUT                   = MFX_MAKEFOURCC('R','P','O','T'),
+    MFX_EXTBUFF_BRC_MULTIPAK                    = MFX_MAKEFOURCC('B','M','P','K'),
 };
 
 /* VPP Conf: Do not use certain algorithms  */
@@ -2115,8 +2115,8 @@ typedef struct {
 
 typedef struct {
     mfxExtBuffer Header;
-    mfxU16       MaxNumRepack;
-} mfxExtPerPackOutput;
+    mfxU16       MaxNumRepackPasses;
+} mfxBRCMultiPAKParam;
 
 #endif
 
