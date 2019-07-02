@@ -437,6 +437,10 @@ namespace ExtBuffer
          MFX_EXTBUFF_MBQP,
          MFX_EXTBUFF_ENCODER_ROI,
          MFX_EXTBUFF_DIRTY_RECTANGLES,
+#ifdef MFX_ENABLE_HEVCE_HDR_SEI
+         MFX_EXTBUFF_MASTERING_DISPLAY_COLOUR_VOLUME,
+         MFX_EXTBUFF_CONTENT_LIGHT_LEVEL_INFO,
+#endif
          MFX_EXTBUFF_ENCODED_FRAME_INFO,
          MFX_EXTBUFF_BRC_MULTIPAK
     };
@@ -464,9 +468,13 @@ namespace ExtBuffer
         EXTBUF(mfxExtDirtyRect,             MFX_EXTBUFF_DIRTY_RECTANGLES);
         EXTBUF(mfxExtBRC,                   MFX_EXTBUFF_BRC);
         EXTBUF(mfxExtMBQP,                  MFX_EXTBUFF_MBQP);
-#if defined(MFX_ENABLE_HEVCE_WEIGHTED_PREDICTION)
+#ifdef MFX_ENABLE_HEVCE_WEIGHTED_PREDICTION
         EXTBUF(mfxExtPredWeightTable,       MFX_EXTBUFF_PRED_WEIGHT_TABLE);
-#endif //defined(MFX_ENABLE_HEVCE_WEIGHTED_PREDICTION)
+#endif
+#ifdef MFX_ENABLE_HEVCE_HDR_SEI
+        EXTBUF(mfxExtMasteringDisplayColourVolume, MFX_EXTBUFF_MASTERING_DISPLAY_COLOUR_VOLUME);
+        EXTBUF(mfxExtContentLightLevelInfo, MFX_EXTBUFF_CONTENT_LIGHT_LEVEL_INFO);
+#endif
         EXTBUF(mfxExtAVCEncodedFrameInfo,   MFX_EXTBUFF_ENCODED_FRAME_INFO);
         EXTBUF(mfxBRCMultiPAKParam,         MFX_EXTBUFF_BRC_MULTIPAK);
 
@@ -804,6 +812,10 @@ public:
         mfxExtBRC                   extBRC;
         mfxExtEncoderROI            ROI;
         mfxExtDirtyRect             DirtyRect;
+#ifdef MFX_ENABLE_HEVCE_HDR_SEI
+        mfxExtMasteringDisplayColourVolume   DisplayColour;
+        mfxExtContentLightLevelInfo LightLevel;
+#endif
         mfxExtEncoderResetOption    ResetOpt;
         mfxBRCMultiPAKParam         MultiPAK;
         mfxExtBuffer *              m_extParam[SIZE_OF_ARRAY(ExtBuffer::allowed_buffers)];
