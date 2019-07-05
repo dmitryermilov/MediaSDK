@@ -300,13 +300,16 @@ public:
         mfxFrameSurface1 surfaces[8];
         Zero(surfaces);
 
+        mfxBRCMultiPAKOutput pakOut = {};
+        mfxExtBuffer* ExtBuffer[1];
+
         if (par.m_ext.MultiPAK.MaxNumRepackPasses)
         {
             mfxFrameData codedFrame = {};
 
-            mfxBRCMultiPAKOutput pakOut = {};
             pakOut.Header.BufferId = MFX_EXTBUFF_BRC_PAK_OUTPUT;
             pakOut.Header.BufferSz = sizeof(mfxBRCMultiPAKOutput);
+            pakOut.NumPAKPasses = task.m_brcFrameCtrl.MaxNumRepak + 1;
 
             mfxBitstream bitstreams[8];
             Zero(bitstreams);
@@ -342,7 +345,6 @@ public:
                 pakOut.Bitstream[i] = &bitstreams[i];
             }
 
-            mfxExtBuffer* ExtBuffer[1];
             ExtBuffer[0] = (mfxExtBuffer*) &pakOut;
             frame_par.NumExtParam = 1;
             frame_par.ExtParam = (mfxExtBuffer**) &ExtBuffer[0];
