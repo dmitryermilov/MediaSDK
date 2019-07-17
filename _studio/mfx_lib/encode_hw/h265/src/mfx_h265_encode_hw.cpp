@@ -353,7 +353,7 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
     m_brc = CreateBrc(m_vpar);
     if (m_brc)
     {
-        sts = m_brc->Init(m_vpar, m_vpar.HRDConformance);
+        sts = m_brc->Init(m_vpar, m_core, m_vpar.HRDConformance);
         MFX_CHECK_STS(sts);
     }
 
@@ -805,7 +805,7 @@ mfxStatus   MFXVideoENCODEH265_HW::Reset(mfxVideoParam *par)
         {
             parNew.m_ext.ResetOpt.StartNewSequence = MFX_CODINGOPTION_ON;
         }
-        sts = m_brc->Reset(parNew);
+        sts = m_brc->Reset(parNew, m_core);
         MFX_CHECK_STS(sts);
         brcReset = false;
     }
@@ -1159,7 +1159,7 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
 
         if (m_brc)
         {
-            brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, (taskForQuery->m_bsDataLength + SEI_len)*8, 0, taskForQuery->m_recode);
+            brcStatus = m_brc->PostPackFrame(m_vpar, *taskForQuery, (taskForQuery->m_bsDataLength + SEI_len)*8, 0, taskForQuery->m_recode);
 
             //printf("m_brc->PostPackFrame poc %d, qp %d, len %d, type %d, status %d\n", taskForQuery->m_poc,taskForQuery->m_qpY, taskForQuery->m_bsDataLength,taskForQuery->m_codingType, brcStatus);
             if (brcStatus != MFX_BRC_OK)
@@ -1173,7 +1173,7 @@ mfxStatus  MFXVideoENCODEH265_HW::Execute(mfxThreadTask thread_task, mfxU32 /*ui
                     //padding is needed
                     m_brc->GetMinMaxFrameSize(&minSize, &maxSize);
                     taskForQuery->m_minFrameSize = (mfxU32) ((minSize + 7) >> 3);
-                    brcStatus = m_brc->PostPackFrame(m_vpar, m_core, *taskForQuery, taskForQuery->m_minFrameSize<<3, 0, ++taskForQuery->m_recode);
+                    brcStatus = m_brc->PostPackFrame(m_vpar, *taskForQuery, taskForQuery->m_minFrameSize<<3, 0, ++taskForQuery->m_recode);
                     MFX_CHECK(brcStatus != MFX_BRC_ERROR,  MFX_ERR_UNDEFINED_BEHAVIOR);
                 }
                 else

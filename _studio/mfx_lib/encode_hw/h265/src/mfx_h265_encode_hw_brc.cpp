@@ -1,15 +1,15 @@
 // Copyright (c) 2017 Intel Corporation
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -45,7 +45,7 @@ mfxF64 const QSTEP_VME[52] = {
     10.26,  11.55,    12.93,  14.81,    17.65,   19.30,   22.30,   25.46,   28.97,   33.22,
     38.50,  43.07,    50.52,  55.70,    64.34,   72.55,   82.25,   93.12,   108.95, 122.40,
     130.39,148.69,   185.05, 194.89,   243.18,  281.61,  290.58,   372.38,  378.27, 406.62,
-    468.34,525.69 
+    468.34,525.69
 };*/
 
 mfxI32 const MAX_QP_CHANGE      = 2;
@@ -57,7 +57,7 @@ mfxF64 const MAX_RATE_COEFF_CHANGE = 2.0;
 
 
 
-mfxStatus VMEBrc::Init(MfxVideoParam &video, mfxI32 )
+mfxStatus VMEBrc::Init(MfxVideoParam &video, VideoCORE * core, mfxI32 )
 {
     m_qpUpdateRange = 20;
     mfxU32 RegressionWindow = 20;
@@ -78,7 +78,7 @@ mfxStatus VMEBrc::Init(MfxVideoParam &video, mfxI32 )
     m_curQp = -1;
     m_curBaseQp = -1;
     m_lookAheadDep = 0;
-    
+
 
     return MFX_ERR_NONE;
 }
@@ -91,10 +91,10 @@ mfxStatus VMEBrc::SetFrameVMEData(const mfxExtLAFrameStatistics *pLaOut, mfxU32 
 
     UMC::AutomaticUMCMutex guard(m_mutex);
 
-    while(resNum < pLaOut->NumStream) 
+    while(resNum < pLaOut->NumStream)
     {
         if (pLaOut->FrameStat[resNum*numLaFrames].Height == height &&
-            pLaOut->FrameStat[resNum*numLaFrames].Width  == width) 
+            pLaOut->FrameStat[resNum*numLaFrames].Width  == width)
             break;
         resNum ++;
     }
@@ -121,7 +121,7 @@ mfxStatus VMEBrc::SetFrameVMEData(const mfxExtLAFrameStatistics *pLaOut, mfxU32 
         ++it;
     }
     mfxU32 ind  = 0;
-    
+
     // check stored sequence
     while ((it != m_laData.end()) && (ind < numLaFrames))
     {
@@ -151,13 +151,13 @@ mfxStatus VMEBrc::SetFrameVMEData(const mfxExtLAFrameStatistics *pLaOut, mfxU32 
             data.estRate[qp] = ((mfxF64)pFrameData[ind].EstimatedRate[qp])/(QSTEP_VME[qp]*k);
             //printf("data.estRate[%d] %f\n", qp, data.estRate[qp]);
         }
-        //printf("EncOrder %d, dispOrder %d, interCost %d,  intraCost %d, data.propCost %d\n", 
+        //printf("EncOrder %d, dispOrder %d, interCost %d,  intraCost %d, data.propCost %d\n",
         //    data.encOrder,data.dispOrder, data.interCost, data.intraCost, data.propCost );
         m_laData.push_back(data);
     }
     if (m_lookAheadDep == 0)
         m_lookAheadDep = numLaFrames;
-      
+
     //printf("VMEBrc::SetFrameVMEData m_laData[0].encOrder %d\n", pFrameData[0].FrameEncodeOrder);
 
     return MFX_ERR_NONE;
@@ -228,7 +228,7 @@ mfxU32 VMEBrc::Report(mfxU32 /*frameType*/, mfxU32 dataLength, mfxU32 /*userData
 
     m_framesBehind++;
     m_bitsBehind += realRatePerMb;
-   
+
     // start of sequence
     mfxU32 numFrames = 0;
     std::list<LaFrameData>::iterator start = m_laData.begin();
@@ -242,7 +242,7 @@ mfxU32 VMEBrc::Report(mfxU32 /*frameType*/, mfxU32 dataLength, mfxU32 /*userData
     for (std::list<LaFrameData>::iterator it = start; it != m_laData.end(); ++it) numFrames++;
     numFrames = MFX_MIN(numFrames, m_lookAheadDep);
 
-     mfxF64 framesBeyond = (mfxF64)(MFX_MAX(2, numFrames) - 1); 
+     mfxF64 framesBeyond = (mfxF64)(MFX_MAX(2, numFrames) - 1);
      m_targetRateMax = (m_initTargetRate * (m_framesBehind + m_lookAheadDep - 1) - m_bitsBehind) / framesBeyond;
      m_targetRateMin = (m_initTargetRate * (m_framesBehind + framesBeyond  ) - m_bitsBehind) / framesBeyond;
 
@@ -256,7 +256,7 @@ mfxU32 VMEBrc::Report(mfxU32 /*frameType*/, mfxU32 dataLength, mfxU32 /*userData
         mfxF64 x = (*start).estRate[curQp];
         mfxF64 minY = NORM_EST_RATE * INIT_RATE_COEFF_VME[curQp] * MIN_RATE_COEFF_CHANGE;
         mfxF64 maxY = NORM_EST_RATE * INIT_RATE_COEFF_VME[curQp] * MAX_RATE_COEFF_CHANGE;
-        y = mfx::clamp(y / x * NORM_EST_RATE, minY, maxY); 
+        y = mfx::clamp(y / x * NORM_EST_RATE, minY, maxY);
         m_rateCoeffHistory[curQp].Add(NORM_EST_RATE, y);
         //mfxF64 ratio = m_rateCoeffHistory[curQp].GetCoeff() / oldCoeff;
         mfxF64 ratio = y / (oldCoeff*NORM_EST_RATE);
@@ -282,7 +282,7 @@ mfxI32 VMEBrc::GetQP(MfxVideoParam & /*video*/, Task &task )
     if (!m_laData.size())
         return 26;
 
-    mfxF64 totalEstRate[52] = {}; 
+    mfxF64 totalEstRate[52] = {};
 
      // start of sequence
     std::list<LaFrameData>::iterator start = m_laData.begin();
@@ -293,10 +293,10 @@ mfxI32 VMEBrc::GetQP(MfxVideoParam & /*video*/, Task &task )
         ++start;
     }
     MFX_CHECK(start != m_laData.end(), MFX_ERR_UNDEFINED_BEHAVIOR);
-    
+
     std::list<LaFrameData>::iterator it = start;
     mfxU32 numberOfFrames = 0;
-    for(it = start;it != m_laData.end(); ++it) 
+    for(it = start;it != m_laData.end(); ++it)
         numberOfFrames++;
 
     numberOfFrames = MFX_MIN(numberOfFrames, m_lookAheadDep);
@@ -307,13 +307,13 @@ mfxI32 VMEBrc::GetQP(MfxVideoParam & /*video*/, Task &task )
    {
         for (mfxU32 qp = 0; qp < 52; qp++)
         {
-            
+
             (*it).estRateTotal[qp] = MFX_MAX(MIN_EST_RATE, m_rateCoeffHistory[qp].GetCoeff() * (*it).estRate[qp]);
-            totalEstRate[qp] += (*it).estRateTotal[qp];        
+            totalEstRate[qp] += (*it).estRateTotal[qp];
         }
         ++it;
    }
-   
+
 
 
    // calculate Qp
@@ -336,8 +336,8 @@ mfxI32 VMEBrc::GetQP(MfxVideoParam & /*video*/, Task &task )
         maxDeltaQp = MFX_MAX(maxDeltaQp, (*it).deltaQp);
         ++it;
     }
-    
- 
+
+
     it = start;
     for (mfxU32 i=0; i < numberOfFrames ; i++)
     {
@@ -345,7 +345,7 @@ mfxI32 VMEBrc::GetQP(MfxVideoParam & /*video*/, Task &task )
         ++it;
     }
 
-    
+
     {
         mfxU8 minQp = (mfxU8) SelectQp(start,m_laData.end(), m_targetRateMax * numberOfFrames, 1);
         mfxU8 maxQp = (mfxU8) SelectQp(start,m_laData.end(), m_targetRateMin * numberOfFrames, 1);
@@ -362,14 +362,14 @@ mfxI32 VMEBrc::GetQP(MfxVideoParam & /*video*/, Task &task )
     m_curQp = mfx::clamp(m_curBaseQp + (*start).deltaQp, 1, 51); // driver doesn't support qp=0
     //printf("%d) intra %d, inter %d, prop %d, delta %d, maxdelta %d, baseQP %d, qp %d \n",(*start).encOrder,(*start).intraCost, (*start).interCost, (*start).propCost, (*start).deltaQp, maxDeltaQp, m_curBaseQp,m_curQp );
 
-    //printf("%d\t base QP %d\tdelta QP %d\tcurQp %d, rate (%f, %f), total rate %f (%f, %f), number of frames %d\n", 
+    //printf("%d\t base QP %d\tdelta QP %d\tcurQp %d, rate (%f, %f), total rate %f (%f, %f), number of frames %d\n",
     //    (*start).dispOrder, m_curBaseQp, (*start).deltaQp, m_curQp, (mfxF32)m_targetRateMax*numberOfFrames,(mfxF32)m_targetRateMin*numberOfFrames,  (mfxF32)GetTotalRate(start,m_laData.end(), m_curQp),  (mfxF32)GetTotalRate(start,m_laData.end(), m_curQp + 1), (mfxF32)GetTotalRate(start,m_laData.end(), m_curQp -1),numberOfFrames);
     //if ((*start).dispOrder > 1700 && (*start).dispOrder < 1800 )
     {
         //for (mfxU32 qp = 0; qp < 52; qp++)
         //{
         //    printf("....qp %d coeff hist %f\n", qp, (mfxF32)m_rateCoeffHistory[qp].GetCoeff());
-       // }        
+       // }
     }
     (*start).qp = m_curQp;
 

@@ -142,13 +142,13 @@ class BrcIface
 {
 public:
     virtual ~BrcIface() {};
-    virtual mfxStatus Init(MfxVideoParam &video, mfxI32 enableRecode = 1) = 0;
-    virtual mfxStatus Reset(MfxVideoParam &video, mfxI32 enableRecode = 1) = 0;
+    virtual mfxStatus Init(MfxVideoParam &video, VideoCORE * core, mfxI32 enableRecode = 1) = 0;
+    virtual mfxStatus Reset(MfxVideoParam &video, VideoCORE * core, mfxI32 enableRecode = 1) = 0;
     virtual mfxStatus Close() = 0;
     virtual void PreEnc(mfxU32 frameType, std::vector<VmeData *> const & vmeData, mfxU32 encOrder) = 0;
     virtual mfxI32 GetQP(MfxVideoParam &video, Task &task)=0;
     virtual mfxStatus SetQP(mfxI32 qp, mfxU16 frameType, bool bLowDelay) = 0;
-    virtual mfxBRCStatus   PostPackFrame(MfxVideoParam &video, VideoCORE * core, Task &task, mfxI32 bitsEncodedFrame, mfxI32 overheadBits, mfxI32 recode = 0) =0;
+    virtual mfxBRCStatus   PostPackFrame(MfxVideoParam &video, Task &task, mfxI32 bitsEncodedFrame, mfxI32 overheadBits, mfxI32 recode = 0) =0;
     virtual mfxStatus SetFrameVMEData(const mfxExtLAFrameStatistics*, mfxU32 , mfxU32 ) = 0;
     virtual void GetMinMaxFrameSize(mfxI32 *minFrameSizeInBits, mfxI32 *maxFrameSizeInBits) = 0;
     virtual bool IsVMEBRC() = 0;
@@ -162,11 +162,11 @@ class VMEBrc : public BrcIface
 public:
     virtual ~VMEBrc() { Close(); }
 
-    mfxStatus Init( MfxVideoParam &video, mfxI32 enableRecode = 1);
-    mfxStatus Reset(MfxVideoParam &video, mfxI32 enableRecode = 1)
+    mfxStatus Init( MfxVideoParam &video, VideoCORE * core, mfxI32 enableRecode = 1);
+    mfxStatus Reset(MfxVideoParam &video, VideoCORE * core, mfxI32 enableRecode = 1)
     {
         Close();
-        return  Init( video, enableRecode);
+        return  Init( video, core, enableRecode);
     }
 
     mfxStatus Close() {  return MFX_ERR_NONE;}
@@ -176,7 +176,7 @@ public:
 
     void PreEnc(mfxU32 frameType, std::vector<VmeData *> const & vmeData, mfxU32 encOrder);
 
-    mfxBRCStatus   PostPackFrame(MfxVideoParam & /*video*/, VideoCORE * core, Task &task, mfxI32 bitsEncodedFrame, mfxI32 /*overheadBits*/, mfxI32 /*recode = 0*/)
+    mfxBRCStatus   PostPackFrame(MfxVideoParam & /*video*/, Task &task, mfxI32 bitsEncodedFrame, mfxI32 /*overheadBits*/, mfxI32 /*recode = 0*/)
     {
         Report(task.m_frameType, bitsEncodedFrame >> 3, 0, 0, task.m_eo, 0, 0);
         return MFX_ERR_NONE;
@@ -242,8 +242,10 @@ public:
     {
         Close();
     }
-    virtual mfxStatus   Init(MfxVideoParam &video, mfxI32 )
+    virtual mfxStatus   Init(MfxVideoParam &video, VideoCORE * core, mfxI32 )
     {
+        MFX_CHECK_NULL_PTR1(core);
+
         mfxStatus sts = MFX_ERR_NONE;
         if (video.m_ext.extBRC.pthis)
         {
@@ -258,11 +260,34 @@ public:
             m_pBRC = &m_BRCLocal;
         }
 
+        // Allocate bitstreams
         m_packBitsteams.resize(video.m_ext.MultiPAK.MaxNumRepackPasses+1);
         for (uint32_t i = 0; i < m_packBitsteams.size(); ++i)
         {
             m_packBitsteams[i].resize(GetMinBsSize(video));
         }
+
+        // Allocate surfaces
+        {
+            mfxFrameAllocRequest request = {};
+            request.Info = video.mfx.FrameInfo;
+            request.Type        = MFX_MEMTYPE_SYS_INT;
+            request.NumFrameMin = request.NumFrameSuggested = video.m_ext.MultiPAK.MaxNumRepackPasses+1;
+
+            mfxStatus sts = core->AllocFrames(&request, &m_response);
+            MFX_CHECK_STS(sts);
+
+            m_packSurfaces.resize(video.m_ext.MultiPAK.MaxNumRepackPasses+1);
+            for (uint32_t i = 0; i < m_packSurfaces.size(); i++)
+            {
+                Zero(m_packSurfaces[i]);
+                m_packSurfaces[i].Info = request.Info;
+                sts = core->LockFrame(m_response.mids[i], &(m_packSurfaces[i].Data));
+                MFX_CHECK_STS(sts);
+            }
+        }
+
+        m_core = core;
 
         return m_pBRC->Init(m_pBRC->pthis, &video);
     }
@@ -272,19 +297,43 @@ public:
         sts =  m_pBRC->Close(m_pBRC->pthis);
         MFX_CHECK_STS(sts);
         HEVCExtBRC::Destroy(m_BRCLocal);
+
+        m_core->FreeFrames(&m_response);
+
         return sts;
     }
-    virtual mfxStatus   Reset(MfxVideoParam &video, mfxI32 )
+    virtual mfxStatus   Reset(MfxVideoParam &video, VideoCORE * core, mfxI32 )
     {
+        MFX_CHECK_NULL_PTR1(core);
+        m_core = core;
         m_packBitsteams.resize(video.m_ext.MultiPAK.MaxNumRepackPasses+1);
         for (uint32_t i = 0; i < m_packBitsteams.size(); ++i)
         {
             m_packBitsteams[i].resize(GetMinBsSize(video));
         }
 
+        m_core->FreeFrames(&m_response);
+
+        mfxFrameAllocRequest request = {};
+        request.Info = video.mfx.FrameInfo;
+        request.Type        = MFX_MEMTYPE_SYS_INT;
+        request.NumFrameMin = request.NumFrameSuggested = video.m_ext.MultiPAK.MaxNumRepackPasses+1;
+
+        mfxStatus sts = core->AllocFrames(&request, &m_response);
+        MFX_CHECK_STS(sts);
+
+        m_packSurfaces.resize(video.m_ext.MultiPAK.MaxNumRepackPasses+1);
+        for (uint32_t i = 0; i < m_packSurfaces.size(); i++)
+        {
+            Zero(m_packSurfaces[i]);
+            m_packSurfaces[i].Info = request.Info;
+            sts = core->LockFrame(m_response.mids[i], &(m_packSurfaces[i].Data));
+            MFX_CHECK_STS(sts);
+        }
+
         return m_pBRC->Reset(m_pBRC->pthis,&video);
     }
-    virtual mfxBRCStatus PostPackFrame(MfxVideoParam & par, VideoCORE * core, Task &task, mfxI32 bitsEncodedFrame, mfxI32 , mfxI32 )
+    virtual mfxBRCStatus PostPackFrame(MfxVideoParam & par, Task &task, mfxI32 bitsEncodedFrame, mfxI32 , mfxI32 )
     {
         mfxBRCFrameParam frame_par  = {};
         mfxBRCFrameCtrl  frame_ctrl = {};
@@ -317,26 +366,20 @@ public:
             for (uint32_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak + 1u; ++i)
             {
                 surfaces[i].Info = par.mfx.FrameInfo;
-                if (par.IOPattern == MFX_IOPATTERN_IN_VIDEO_MEMORY)
-                {
-                    surfaces[i].Data.MemId = core->MapIdx(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1]);
-                }
-                else if (par.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY)
-                {
-                    sts = core->LockFrame(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1], &surfaces[i].Data);
-                    MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
-                }
+                surfaces[i].Data.MemId = m_core->MapIdx(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1]);
+                sts = m_core->DoFastCopyWrapper(&m_packSurfaces[i], MFX_MEMTYPE_SYS_EXT, &surfaces[i], MFX_MEMTYPE_D3D_EXT);
+                MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
 
-                pakOut.Reconstruct[i] = &surfaces[i];
+                pakOut.Reconstruct[i] = &m_packSurfaces[i];
 
-                sts = core->LockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
+                sts = m_core->LockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
                 MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
                 MFX_CHECK(codedFrame.Y, MFX_BRC_ERROR);
 
                 mfxSize roi = {i == 0 ? (int32_t)task.m_bsDataLength : (int32_t)task.m_pakBsSizes[i-1], 1};
                 FastCopy::Copy(m_packBitsteams[i].data(), i == 0 ? task.m_bsDataLength : task.m_pakBsSizes[i-1], codedFrame.Y, codedFrame.Pitch, roi, COPY_VIDEO_TO_SYS);
 
-                sts = core->UnlockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
+                sts = m_core->UnlockFrame(i == 0 ? task.m_midBs : task.m_midBs_for_pak[i-1], &codedFrame);
                 MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
 
                 bitstreams[i].Data = m_packBitsteams[i].data();
@@ -355,15 +398,6 @@ public:
 
         if (par.m_ext.MultiPAK.MaxNumRepackPasses)
         {
-            if (par.IOPattern == MFX_IOPATTERN_IN_SYSTEM_MEMORY)
-            {
-                for (uint32_t i = 0; i < task.m_brcFrameCtrl.MaxNumRepak + 1u; ++i)
-                {
-                    sts = core->UnlockFrame(i == 0 ? task.m_midRec : task.m_midsRec_for_pak[i-1], &surfaces[i].Data);
-                    MFX_CHECK(sts == MFX_ERR_NONE, MFX_BRC_ERROR);
-                }
-            }
-
             MFX_CHECK((frame_sts.SelectedBistream <= task.m_brcFrameCtrl.MaxNumRepak),  MFX_BRC_ERROR);
             task.m_selectedBistream = frame_sts.SelectedBistream;
         }
@@ -422,6 +456,10 @@ private:
     mfxExtBRC   m_BRCLocal;
 
     std::vector<std::vector<mfxU8>> m_packBitsteams;
+    std::vector<mfxFrameSurface1>   m_packSurfaces; // in system memory
+    mfxFrameAllocResponse           m_response;
+
+    VideoCORE *                     m_core;
 
 protected:
     void InitFramePar(Task &task, mfxBRCFrameParam & frame_par)
