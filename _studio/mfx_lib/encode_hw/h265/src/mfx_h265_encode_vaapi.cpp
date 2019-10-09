@@ -637,6 +637,8 @@ static mfxStatus SetMultiPassRePAKOutput(
         //printf("[PAK %lu] reconstructed picture_id %d\n", i + 1, ctrl->reconstructed_pictures[i]);
     }
 
+    ctrl->cu_stat = bsQueue[task.m_idxsBs_for_pak[0]].statistic;
+
     ctrl->num_passes = task.m_brcFrameCtrl.MaxNumRepak;
 
     {
@@ -1305,15 +1307,12 @@ mfxStatus VAAPIEncoder::Register(mfxFrameAllocResponse& response, D3DDDIFORMAT t
     std::vector<ExtVASurface> * pQueue;
     mfxStatus sts;
 
-    if (D3DDDIFMT_INTELENCODE_BITSTREAMDATA == type )
-        pQueue = &m_bsQueue;
-    else
-        pQueue = &m_reconQueue;
+    std::vector<ExtVASurface> & queue = (D3DDDIFMT_INTELENCODE_BITSTREAMDATA == type) ? m_bsQueue : m_reconQueue;
 
     // we should register allocated HW bitstreams and recon surfaces
     MFX_CHECK( response.mids, MFX_ERR_NULL_PTR );
 
-    ExtVASurface extSurf = {VA_INVALID_SURFACE, 0, 0, 0};
+    ExtVASurface extSurf;
     VASurfaceID *pSurface = NULL;
 
     for (mfxU32 i = 0; i < response.NumFrameActual; i++)
@@ -1325,10 +1324,28 @@ mfxStatus VAAPIEncoder::Register(mfxFrameAllocResponse& response, D3DDDIFORMAT t
         extSurf.number  = i;
         extSurf.surface = *pSurface;
 
-        pQueue->push_back( extSurf );
+        queue.push_back( extSurf );
     }
 
-    if (D3DDDIFMT_INTELENCODE_BITSTREAMDATA != type )
+    if (D3DDDIFMT_INTELENCODE_BITSTREAMDATA == type)
+    {
+        constexpr uint32_t min_cu_size = 8;
+        constexpr uint32_t cache_line_size = 64;
+        uint32_t frameWidthInCus   = Align(m_videoParam.mfx.FrameInfo.Width, min_cu_size) / min_cu_size;
+        uint32_t frameHeightInCus  = Align(m_videoParam.mfx.FrameInfo.Height, min_cu_size) / min_cu_size;
+        size_t size = Align(frameWidthInCus * frameHeightInCus * 16, cache_line_size);
+
+        for (mfxU32 i = 0; i < queue.size(); i++)
+        {
+            VAStatus vaSts = vaCreateBuffer(m_vaDisplay, m_vaContextEncode,
+                VAStatsMVPredictorBufferType, size, //VAStatsMVPredictorBufferType is a dirty hack
+                1,
+                NULL,
+                &queue[i].statistic);
+            MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+        }
+    }
+    else
     {
         sts = CreateAccelerationService(m_videoParam);
         MFX_CHECK_STS(sts);
@@ -1947,6 +1964,7 @@ mfxStatus VAAPIEncoder::Execute(Task const & task, mfxHDLPair pair)
         ExtVASurface currentFeedback;
         currentFeedback.number  = task.m_statusReportNumber;
         currentFeedback.surface = (!skipMode.NeedDriverCall()) ? VA_INVALID_SURFACE : *inputSurface;//*inputSurface;
+        currentFeedback.statistic = m_bsQueue[task.m_idxsBs_for_pak[0]].statistic;
         currentFeedback.size = storedSize;
         currentFeedback.idxBs   = task.m_idxBs;
         m_feedbackCache.push_back(currentFeedback);
@@ -1964,6 +1982,7 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
     VAStatus vaSts;
     bool isFound = false;
     VASurfaceID waitSurface;
+    VABufferID  statistic = VA_INVALID_ID;
     mfxU32 waitIdxBs;
     mfxU32 indxSurf;
     mfxU32 waitSize(0);
@@ -1977,6 +1996,7 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
         if(currentFeedback.number == task.m_statusReportNumber)
         {
             waitSurface = currentFeedback.surface;
+            statistic = currentFeedback.statistic;
             waitIdxBs   = currentFeedback.idxBs;
             waitSize = currentFeedback.size;
             isFound  = true;
@@ -2072,6 +2092,20 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
                         vaSts = vaUnmapBuffer( m_vaDisplay, buffer );
                         MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
                     }
+
+                    {
+                        void* src = nullptr;
+                        vaSts = vaMapBuffer(
+                                m_vaDisplay,
+                                statistic,
+                                (void **) (&src));
+                        MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+
+                        memcpy(task.m_stat->data(), src, task.m_stat->size() * sizeof (mfxHevcPakCuLevelStreamOut));
+
+                        vaSts = vaUnmapBuffer(m_vaDisplay, statistic);
+                        MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+                    }
                 }
 
                 return sts;
@@ -2093,6 +2127,11 @@ mfxStatus VAAPIEncoder::QueryStatus(Task & task)
 mfxStatus VAAPIEncoder::Destroy()
 {
     VABuffersDestroy();
+
+    for (mfxU32 i = 0; i < m_bsQueue.size(); i++)
+    {
+        vaDestroyBuffer(m_vaDisplay, m_bsQueue[i].statistic);
+    }
 
     if (m_vaContextEncode != VA_INVALID_ID)
     {

@@ -156,10 +156,11 @@ mfxStatus SetSkipFrame(
 
     typedef struct
     {
-        VASurfaceID surface;
-        mfxU32 number;
-        mfxU32 idxBs;
-        mfxU32 size;
+        VASurfaceID surface = VA_INVALID_SURFACE;
+        VABufferID  statistic = VA_INVALID_ID;
+        mfxU32 number = 0;
+        mfxU32 idxBs = 0;
+        mfxU32 size = 0;
     } ExtVASurface;
 
     class CUQPMap

@@ -388,6 +388,8 @@ struct Task : DpbFrame
     mfxU32            m_pakQPs[8]                     = {};
 
     uint32_t          m_selectedBistream              = 0;
+
+    std::vector<mfxHevcPakCuLevelStreamOut>* m_stat   = nullptr;
 };
 
 enum

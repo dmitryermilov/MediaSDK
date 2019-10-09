@@ -388,6 +388,18 @@ public:
                 pakOut.Bitstream[i] = &bitstreams[i];
             }
 
+            // CU level stat
+            {
+                pakOut.NumCUAlloc = task.m_stat->size();
+                pakOut.CuStat = task.m_stat->data();
+
+                mfxHevcPakCuLevelStreamOut * p = task.m_stat->data();
+                for (int i = 0; i < 100; ++i, ++p)
+                {
+                    printf("BRC: CoeffBitCount %d, TotalBitCount %d, LcuExceedLimit %d\n", p->CoeffBitCount, p->TotalBitCount, p->LcuExceedLimit);
+                }
+            }
+
             ExtBuffer[0] = (mfxExtBuffer*) &pakOut;
             frame_par.NumExtParam = 1;
             frame_par.ExtParam = (mfxExtBuffer**) &ExtBuffer[0];
@@ -439,7 +451,6 @@ public:
     virtual void        GetMinMaxFrameSize(mfxI32 *minFrameSizeInBits, mfxI32 *)
     {
         *minFrameSizeInBits = m_minSize;
-
     }
 
 

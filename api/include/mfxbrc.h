@@ -116,10 +116,33 @@ typedef struct {
 } mfxExtBRC;
 
 typedef struct {
+    /* DWORD 0 */
+    mfxU32    SkipFlag         : 1;
+    mfxU32    LcuExceedLimit   : 1; // It signals last CU in LCU
+    mfxU32    reserved0        : 14;
+    mfxU32    TU_CBF_Y         : 16;
+
+    /* DWORD 1 */
+    mfxU32    TU_CBF_U         : 16;
+    mfxU32    TU_CBF_V         : 16;
+
+    /* DWORD 2 */
+    mfxU32    CoeffBitCount    : 18;
+    mfxU32    reserved1        : 14;
+
+    /* DWORD 3 */
+    mfxU32    TotalBitCount    : 18;
+    mfxU32    reserved2        : 14;
+} mfxHevcPakCuLevelStreamOut;
+
+typedef struct {
     mfxExtBuffer           Header;
     mfxU16                 NumPAKPasses;
     mfxFrameSurface1*      Reconstruct[8]; // 1 ENCPAK + 7 repacks
     mfxBitstream*          Bitstream[8];
+
+    mfxU32  NumCUAlloc;
+    mfxHevcPakCuLevelStreamOut* CuStat; // for the 0th PAK pass
 } mfxBRCMultiPAKOutput;
 
 #ifdef __cplusplus

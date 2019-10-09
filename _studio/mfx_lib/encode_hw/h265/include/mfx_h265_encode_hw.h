@@ -204,6 +204,8 @@ protected:
     bool                            m_bInit;
     mfxStatus                       m_runtimeErr;
     BrcIface*                       m_brc;
+
+    std::vector<mfxHevcPakCuLevelStreamOut> m_cuStat;
 };
 
 } //MfxHwH265Encode

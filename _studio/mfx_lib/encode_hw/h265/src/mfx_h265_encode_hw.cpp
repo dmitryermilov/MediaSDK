@@ -355,6 +355,16 @@ mfxStatus MFXVideoENCODEH265_HW::InitImpl(mfxVideoParam *par)
     {
         sts = m_brc->Init(m_vpar, m_core, m_vpar.HRDConformance);
         MFX_CHECK_STS(sts);
+
+        // Allocate statistic
+        {
+            constexpr uint32_t min_cu_size = 8;
+            constexpr uint32_t cache_line_size = 64;
+            uint32_t frameWidthInCus  = Align(m_vpar.mfx.FrameInfo.Width, min_cu_size) / min_cu_size;
+            uint32_t frameHeightInCus = Align(m_vpar.mfx.FrameInfo.Height, min_cu_size) / min_cu_size;
+            size_t size = Align(frameWidthInCus * frameHeightInCus, cache_line_size);
+            m_cuStat.resize(size);
+        }
     }
 
     m_bInit = true;
@@ -1016,6 +1026,8 @@ mfxStatus MFXVideoENCODEH265_HW::PrepareTask(Task& input_task)
 
         task->m_idxCUQp = (mfxU8)FindFreeResourceIndex(m_CuQp);
         task->m_midCUQp = AcquireResource(m_CuQp, task->m_idxCUQp);
+
+        task->m_stat = &m_cuStat;
 
         ConfigureTask(*task, m_lastTask, m_vpar, m_caps, m_baseLayerOrder);
 
