@@ -18,8 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <memory>
 #include "common_utils.h"
 #include "cmd_options.h"
+#include "bitstream_reader.h"
 
 static void usage(CmdOptionsCtx* ctx)
 {
@@ -66,9 +68,8 @@ int main(int argc, char** argv)
 
     bEnableOutput = (options.values.SinkName[0] != '\0');
 
-    FILE* fSource;
-    MSDK_FOPEN(fSource, options.values.SourceName, "rb");
-    MSDK_CHECK_POINTER(fSource, MFX_ERR_NULL_PTR);
+    std::unique_ptr<CSmplBitstreamReader>  fileReader(new CSplitterBitstreamReader(MFX_CODEC_AVC));
+    fileReader->Init(options.values.SourceName);
 
     // Create output elementary stream (ES) H.264 file
     FILE* fSink = NULL;
@@ -104,16 +105,12 @@ int main(int argc, char** argv)
 
     // Prepare Media SDK bit stream buffer for decoder
     // - Arbitrary buffer size for this example
-    mfxBitstream mfxBS;
-    memset(&mfxBS, 0, sizeof(mfxBS));
-    mfxBS.MaxLength = 1024 * 1024;
-    mfxBS.Data = new mfxU8[mfxBS.MaxLength];
-    MSDK_CHECK_POINTER(mfxBS.Data, MFX_ERR_MEMORY_ALLOC);
+    mfxBitstreamWrapper mfxBS(1024 * 1024);
 
     // Read a chunk of data from stream file into bit stream buffer
     // - Parse bit stream, searching for header and fill video parameters structure
     // - Abort if bit stream header is not found in the first bit stream buffer chunk
-    sts = ReadBitStreamData(&mfxBS, fSource);
+    sts = fileReader->ReadNextFrame(&mfxBS);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 
     sts = mfxDEC.DecodeHeader(&mfxBS, &mfxDecParams);
@@ -224,7 +221,7 @@ int main(int argc, char** argv)
             MSDK_SLEEP(1);  // just wait and then repeat the same call to DecodeFrameAsync
 
         if (MFX_ERR_MORE_DATA == sts) {
-            sts = ReadBitStreamData(&mfxBS, fSource);       // Read more data to input bit stream
+            sts = fileReader->ReadNextFrame(&mfxBS);
             MSDK_BREAK_ON_ERROR(sts);
         }
 
@@ -402,12 +399,10 @@ int main(int argc, char** argv)
     for (int i = 0; i < numSurfacesDec; i++)
         delete pmfxSurfacesDec[i];
     MSDK_SAFE_DELETE_ARRAY(pmfxSurfacesDec);
-    MSDK_SAFE_DELETE_ARRAY(mfxBS.Data);
     MSDK_SAFE_DELETE_ARRAY(mfxEncBS.Data);
 
     mfxAllocator.Free(mfxAllocator.pthis, &DecResponse);
 
-    fclose(fSource);
     if (fSink) fclose(fSink);
 
     Release();
