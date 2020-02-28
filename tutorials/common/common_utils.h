@@ -118,6 +118,7 @@ void ClearRGBSurfaceVMem(mfxMemId memId);
 
 // Get free raw frame surface
 int GetFreeSurfaceIndex(mfxFrameSurface1** pSurfacesPool, mfxU16 nPoolSize);
+int GetFreeSurfaceIndex_(mfxFrameSurface1* pSurfacesPool, mfxU16 nPoolSize);
 int GetFreeSurfaceIndex(const std::vector<mfxFrameSurface1>& pSurfacesPool);
 
 // For use with asynchronous task management

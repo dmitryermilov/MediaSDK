@@ -20,6 +20,8 @@
 
 #include "common_utils.h"
 #include "cmd_options.h"
+#include "mfx2/mfx_ext.h"
+#include "mfx2/mfx_ext++.h"
 
 static void usage(CmdOptionsCtx* ctx)
 {
@@ -91,10 +93,28 @@ int main(int argc, char** argv)
     mfxVersion ver = { {0, 1} };
     MFXVideoSession session;
 
-    mfxFrameAllocator mfxAllocator;
-
-    sts = Initialize(impl, ver, &session, &mfxAllocator);
+    sts = Initialize(impl, ver, &session, NULL);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+
+    mfxHDL displayHandle = {};
+    sts = session.GetHandle(static_cast < mfxHandleType >(MFX_HANDLE_VA_DISPLAY), &displayHandle);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+
+//#define MFX_CPP
+#ifdef MFX_CPP
+    MFXAllocator allocator;
+    sts = allocator.Init(displayHandle, MFX_FRAME_ALLOCATOR_VAAPI);
+
+    sts = session.SetFrameAllocator(allocator);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#else
+    mfxFrameAllocator* mfxAllocator = nullptr;
+    sts = MFXMemory_CreateAllocator(displayHandle, MFX_FRAME_ALLOCATOR_VAAPI, &mfxAllocator);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+
+    sts = session.SetFrameAllocator(mfxAllocator);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#endif
 
     // Create Media SDK encoder
     MFXVideoENCODE mfxENC(session);
@@ -127,8 +147,6 @@ int main(int argc, char** argv)
 
     mfxEncParams.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY;
 
-
-
     // Validate video encode parameters (optional)
     // - In this example the validation result is written to same structure
     // - MFX_WRN_INCOMPATIBLE_VIDEO_PARAM is returned if some of the video parameters are not supported,
@@ -146,22 +164,15 @@ int main(int argc, char** argv)
     EncRequest.Type |= WILL_WRITE; // This line is only required for Windows DirectX11 to ensure that surfaces can be written to by the application
 
     // Allocate required surfaces
-    mfxFrameAllocResponse mfxResponse;
-    sts = mfxAllocator.Alloc(mfxAllocator.pthis, &EncRequest, &mfxResponse);
+    mfxFrameSurface1 * surfaces = nullptr;
+
+#ifdef MFX_CPP
+    sts = allocator.CreateSurfaces(&EncRequest.Info, EncRequest.NumFrameSuggested, &surfaces);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
-
-    mfxU16 nEncSurfNum = mfxResponse.NumFrameActual;
-
-    // Allocate surface headers (mfxFrameSurface1) for encoder
-    std::vector<mfxFrameSurface1> pmfxSurfaces(nEncSurfNum);
-    for (int i = 0; i < nEncSurfNum; i++) {
-        memset(&pmfxSurfaces[i], 0, sizeof(mfxFrameSurface1));
-        pmfxSurfaces[i].Info = mfxEncParams.mfx.FrameInfo;
-        pmfxSurfaces[i].Data.MemId = mfxResponse.mids[i];      // MID (memory id) represent one video NV12 surface
-        if (!bEnableInput) {
-            ClearYUVSurfaceVMem(pmfxSurfaces[i].Data.MemId);
-        }
-    }
+#else
+    sts = MFXMemory_CreateSurfaces(mfxAllocator, &EncRequest.Info, EncRequest.NumFrameSuggested, &surfaces);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#endif
 
     // Initialize the Media SDK encoder
     sts = mfxENC.Init(&mfxEncParams);
@@ -197,23 +208,28 @@ int main(int argc, char** argv)
     //
     // Stage 1: Main encoding loop
     //
+
+#ifdef MFX_CPP
+    mfxFrameAllocator* mfxAllocator = allocator;
+#endif
+
     while (MFX_ERR_NONE <= sts || MFX_ERR_MORE_DATA == sts) {
-        nEncSurfIdx = GetFreeSurfaceIndex(pmfxSurfaces);   // Find free frame surface
+        nEncSurfIdx = GetFreeSurfaceIndex_(surfaces, EncRequest.NumFrameSuggested);   // Find free frame surface
         MSDK_CHECK_ERROR(MFX_ERR_NOT_FOUND, nEncSurfIdx, MFX_ERR_MEMORY_ALLOC);
 
         // Surface locking required when read/write video surfaces
-        sts = mfxAllocator.Lock(mfxAllocator.pthis, pmfxSurfaces[nEncSurfIdx].Data.MemId, &(pmfxSurfaces[nEncSurfIdx].Data));
+        sts = mfxAllocator->Lock(mfxAllocator->pthis, surfaces[nEncSurfIdx].Data.MemId, &(surfaces[nEncSurfIdx].Data));
         MSDK_BREAK_ON_ERROR(sts);
 
-        sts = LoadRawFrame(&pmfxSurfaces[nEncSurfIdx], fSource.get());
+        sts = LoadRawFrame(&surfaces[nEncSurfIdx], fSource.get());
         MSDK_BREAK_ON_ERROR(sts);
 
-        sts = mfxAllocator.Unlock(mfxAllocator.pthis, pmfxSurfaces[nEncSurfIdx].Data.MemId, &(pmfxSurfaces[nEncSurfIdx].Data));
+        sts = mfxAllocator->Unlock(mfxAllocator->pthis, surfaces[nEncSurfIdx].Data.MemId, &(surfaces[nEncSurfIdx].Data));
         MSDK_BREAK_ON_ERROR(sts);
 
         for (;;) {
             // Encode a frame asychronously (returns immediately)
-            sts = mfxENC.EncodeFrameAsync(NULL, &pmfxSurfaces[nEncSurfIdx], &mfxBS, &syncp);
+            sts = mfxENC.EncodeFrameAsync(NULL, &surfaces[nEncSurfIdx], &mfxBS, &syncp);
 
             if (MFX_ERR_NONE < sts && !syncp) {     // Repeat the call if warning and no output
                 if (MFX_WRN_DEVICE_BUSY == sts)
@@ -297,7 +313,13 @@ int main(int argc, char** argv)
     mfxENC.Close();
     // session closed automatically on destruction
 
-    mfxAllocator.Free(mfxAllocator.pthis, &mfxResponse);
+#ifdef MFX_CPP
+    sts = allocator.ReleaseSurfaces(EncRequest.NumFrameSuggested, surfaces);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#else
+    sts = MFXMemory_ReleaseSurfaces(mfxAllocator, EncRequest.NumFrameSuggested, surfaces);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+#endif
 
     Release();
 

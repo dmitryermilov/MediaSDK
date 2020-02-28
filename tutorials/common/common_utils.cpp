@@ -467,6 +467,15 @@ int GetFreeSurfaceIndex(mfxFrameSurface1** pSurfacesPool, mfxU16 nPoolSize)
     return MFX_ERR_NOT_FOUND;
 }
 
+int GetFreeSurfaceIndex_(mfxFrameSurface1* pSurfacesPool, mfxU16 nPoolSize)
+{
+    if (pSurfacesPool)
+        for (mfxU16 i = 0; i < nPoolSize; i++)
+            if (0 == pSurfacesPool[i].Data.Locked)
+                return i;
+    return MFX_ERR_NOT_FOUND;
+}
+
 int GetFreeSurfaceIndex(const std::vector<mfxFrameSurface1>& pSurfacesPool)
 {
     auto it = std::find_if(pSurfacesPool.begin(), pSurfacesPool.end(), [](const mfxFrameSurface1& surface) {
