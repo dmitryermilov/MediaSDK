@@ -56,6 +56,11 @@ mfxStatus MFXMemory_CreateAllocator(mfxHDL hdl, mfxFrameAllocatorType type, mfxF
     return MFX_ERR_NONE;
 }
 
+struct mfxFrameSurfacePrivCtx
+{
+    mfxFrameAllocator allocator;
+};
+
 mfxStatus MFXMemory_CreateSurfaces(mfxFrameAllocator* allocator, mfxFrameInfo* info, mfxU32 num_surfaces, mfxFrameSurface1** surfaces)
 {
     if (!allocator)
@@ -71,21 +76,24 @@ mfxStatus MFXMemory_CreateSurfaces(mfxFrameAllocator* allocator, mfxFrameInfo* i
 
     mfxFrameAllocRequest req = {};
     req.Info = *info;
-    req.NumFrameMin = req.NumFrameSuggested = num_surfaces;
+    req.NumFrameMin = req.NumFrameSuggested = 1;
 
-    std::vector<mfxMemId> mids(num_surfaces);
+    mfxMemId mid = {};
 
     mfxFrameAllocResponse response = {};
-    response.mids = mids.data();
-
-    auto sts = allocator->Alloc(allocator->pthis, &req, &response);
-    if (sts != MFX_ERR_NONE)
-        return sts;
+    response.mids = &mid;
 
     for (mfxU32 i = 0; i < num_surfaces; ++i)
     {
+        auto sts = allocator->Alloc(allocator->pthis, &req, &response);
+        if (sts != MFX_ERR_NONE)
+            return sts;
+
+        auto privCtx = new mfxFrameSurfacePrivCtx();
+        privCtx->allocator = *allocator;
+        s[i].pthis = (mfxHDL)privCtx;
         s[i].Info = *info;
-        s[i].Data.MemId = response.mids[i];
+        s[i].Data.MemId = response.mids[0];
     }
 
     *surfaces = s;
@@ -93,28 +101,58 @@ mfxStatus MFXMemory_CreateSurfaces(mfxFrameAllocator* allocator, mfxFrameInfo* i
     return MFX_ERR_NONE;
 }
 
-mfxStatus MFXMemory_ReleaseSurfaces(mfxFrameAllocator* allocator, mfxU32 num_surfaces, mfxFrameSurface1* surfaces)
+mfxStatus MFXMemory_ReleaseSurfaces(mfxU32 num_surfaces, mfxFrameSurface1* surfaces)
 {
-    if (!allocator)
-        return MFX_ERR_NULL_PTR;
-
     if (!surfaces)
         return MFX_ERR_NULL_PTR;
 
-    std::vector<mfxMemId> mids(num_surfaces);
+    mfxMemId mid = {};
 
     mfxFrameAllocResponse response = {};
-    response.mids = mids.data();
+    response.NumFrameActual = 1;
+    response.mids = &mid;
     for (mfxU32 i = 0; i < num_surfaces; ++i)
     {
-        response.mids[i] = surfaces[i].Data.MemId;
-    }
+        auto privCtx = (mfxFrameSurfacePrivCtx*)surfaces[i].pthis;
+        response.mids[0] = surfaces[i].Data.MemId;
+        auto sts = privCtx->allocator.Free(privCtx->allocator.pthis, &response);
+        if (sts != MFX_ERR_NONE)
+            return sts;
 
-    auto sts = allocator->Free(allocator->pthis, &response);
-    if (sts != MFX_ERR_NONE)
-        return sts;
+        delete privCtx;
+    }
 
     delete[] surfaces;
 
     return MFX_ERR_NONE;
+}
+
+mfxStatus MFXMemory_LockSurface(mfxFrameSurface1* surface, mfxU32 flags)
+{
+    if (!surface)
+        return MFX_ERR_NULL_PTR;
+
+    auto privCtx = (mfxFrameSurfacePrivCtx*)surface->pthis;
+
+    return privCtx->allocator.Lock(privCtx->allocator.pthis, surface->Data.MemId, &surface->Data);
+}
+
+mfxStatus MFXMemory_UnlockSurface(mfxFrameSurface1* surface)
+{
+    if (!surface)
+        return MFX_ERR_NULL_PTR;
+
+    auto privCtx = (mfxFrameSurfacePrivCtx*)surface->pthis;
+
+    return privCtx->allocator.Unlock(privCtx->allocator.pthis, surface->Data.MemId, &surface->Data);
+}
+
+mfxStatus MFXMemory_GetHandle(mfxFrameSurface1* surface, mfxU32 /*type*/, mfxHDL* hdl)
+{
+    if (!surface)
+        return MFX_ERR_NULL_PTR;
+
+    auto privCtx = (mfxFrameSurfacePrivCtx*)surface->pthis;
+
+    return privCtx->allocator.GetHDL(privCtx->allocator.pthis, surface->Data.MemId, hdl);
 }

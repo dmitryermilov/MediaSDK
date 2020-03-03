@@ -21,9 +21,10 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 
 #include <va/va.h>
 #include "mfxvideo.h"
+#include "mfx_ext++.h"
 
 
-class VAAPIFrameAllocator: public mfxFrameAllocator
+class VAAPIFrameAllocator: public MFXAllocator
 {
 public:
     VAAPIFrameAllocator(mfxHDL hdl);

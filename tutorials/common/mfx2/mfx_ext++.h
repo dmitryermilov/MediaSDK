@@ -21,32 +21,65 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 
 #include "mfx_ext.h"
 
-class MFXAllocator
+class MFXAllocator : public mfxFrameAllocator
 {
 public:
-    MFXAllocator(void) { m_allocator = nullptr; }
+    MFXAllocator(void)
+    {
+        auto self = static_cast<mfxFrameAllocator*>(this);
+        *self = mfxFrameAllocator();
+    }
     virtual ~MFXAllocator(void) {  }
     
     virtual mfxStatus Init(mfxHDL hdl, mfxFrameAllocatorType type) 
     {
-        m_allocator = new mfxFrameAllocator;
-        return MFXMemory_CreateAllocator(hdl, type, &m_allocator); 
+        mfxFrameAllocator* a = nullptr;
+        mfxStatus sts = MFXMemory_CreateAllocator(hdl, type, &a);
+        if (sts != MFX_ERR_NONE)
+            return sts;
+
+        pthis = a->pthis;
+        Alloc = a->Alloc;
+        Lock = a->Lock;
+        Free = a->Free;
+        Unlock = a->Unlock;
+        GetHDL = a->GetHDL;
+
+        return MFX_ERR_NONE;
     }
 
     virtual mfxStatus CreateSurfaces(mfxFrameInfo* info, mfxU32 num_surfaces, mfxFrameSurface1** surfaces)
     {
-        return MFXMemory_CreateSurfaces(m_allocator, info, num_surfaces, surfaces);
+        mfxFrameAllocator a = {};
+        a.pthis = pthis;
+        a.Alloc = Alloc;
+        a.Lock  = Lock;
+        a.Free  = Free;
+        a.Unlock = Unlock;
+        a.GetHDL = GetHDL;
+
+        return MFXMemory_CreateSurfaces(&a, info, num_surfaces, surfaces);
     }
+
     virtual mfxStatus ReleaseSurfaces(mfxU32 num_surfaces, mfxFrameSurface1* surfaces)
     {
-        return MFXMemory_ReleaseSurfaces(m_allocator, num_surfaces, surfaces);
+        return MFXMemory_ReleaseSurfaces(num_surfaces, surfaces);
     }
-    
-    virtual operator mfxFrameAllocator* (void) { return m_allocator; }
 
-protected:
-    
-    mfxFrameAllocator* m_allocator;
+    virtual mfxStatus LockSurface(mfxFrameSurface1* surface, mfxU32 flags)
+    {
+        return MFXMemory_LockSurface(surface, flags);
+    }
+
+    virtual mfxStatus UnlockSurface(mfxFrameSurface1* surface)
+    {
+        return MFXMemory_UnlockSurface(surface);
+    }
+
+    virtual mfxStatus GetHandle(mfxFrameSurface1* surface, mfxU32 type, mfxHDL* hdl)
+    {
+        return MFXMemory_GetHandle(surface, type, hdl);
+    }
 
 private:
     MFXAllocator(const MFXAllocator &);

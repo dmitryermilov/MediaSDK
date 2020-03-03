@@ -105,7 +105,7 @@ int main(int argc, char** argv)
     MFXAllocator allocator;
     sts = allocator.Init(displayHandle, MFX_FRAME_ALLOCATOR_VAAPI);
 
-    sts = session.SetFrameAllocator(allocator);
+    sts = session.SetFrameAllocator(&allocator);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 #else
     mfxFrameAllocator* mfxAllocator = nullptr;
@@ -209,23 +209,31 @@ int main(int argc, char** argv)
     // Stage 1: Main encoding loop
     //
 
-#ifdef MFX_CPP
-    mfxFrameAllocator* mfxAllocator = allocator;
-#endif
-
     while (MFX_ERR_NONE <= sts || MFX_ERR_MORE_DATA == sts) {
         nEncSurfIdx = GetFreeSurfaceIndex_(surfaces, EncRequest.NumFrameSuggested);   // Find free frame surface
         MSDK_CHECK_ERROR(MFX_ERR_NOT_FOUND, nEncSurfIdx, MFX_ERR_MEMORY_ALLOC);
 
         // Surface locking required when read/write video surfaces
-        sts = mfxAllocator->Lock(mfxAllocator->pthis, surfaces[nEncSurfIdx].Data.MemId, &(surfaces[nEncSurfIdx].Data));
+#ifdef MFX_CPP
+        sts = allocator.LockSurface(&surfaces[nEncSurfIdx], 0);
         MSDK_BREAK_ON_ERROR(sts);
 
         sts = LoadRawFrame(&surfaces[nEncSurfIdx], fSource.get());
         MSDK_BREAK_ON_ERROR(sts);
 
-        sts = mfxAllocator->Unlock(mfxAllocator->pthis, surfaces[nEncSurfIdx].Data.MemId, &(surfaces[nEncSurfIdx].Data));
+        sts = allocator.UnlockSurface(&surfaces[nEncSurfIdx]);
         MSDK_BREAK_ON_ERROR(sts);
+
+#else
+        sts = MFXMemory_LockSurface(&surfaces[nEncSurfIdx], 0);
+        MSDK_BREAK_ON_ERROR(sts);
+
+        sts = LoadRawFrame(&surfaces[nEncSurfIdx], fSource.get());
+        MSDK_BREAK_ON_ERROR(sts);
+
+        sts = MFXMemory_UnlockSurface(&surfaces[nEncSurfIdx]);
+        MSDK_BREAK_ON_ERROR(sts);
+#endif
 
         for (;;) {
             // Encode a frame asychronously (returns immediately)
@@ -317,7 +325,7 @@ int main(int argc, char** argv)
     sts = allocator.ReleaseSurfaces(EncRequest.NumFrameSuggested, surfaces);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 #else
-    sts = MFXMemory_ReleaseSurfaces(mfxAllocator, EncRequest.NumFrameSuggested, surfaces);
+    sts = MFXMemory_ReleaseSurfaces(EncRequest.NumFrameSuggested, surfaces);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 #endif
 

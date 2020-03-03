@@ -31,7 +31,11 @@ typedef enum {
 
 mfxStatus MFXMemory_CreateAllocator(mfxHDL hdl, mfxFrameAllocatorType type, mfxFrameAllocator** allocator);
 mfxStatus MFXMemory_CreateSurfaces(mfxFrameAllocator* allocator, mfxFrameInfo* info, mfxU32 num_surfaces, mfxFrameSurface1** surfaces);
-mfxStatus MFXMemory_ReleaseSurfaces(mfxFrameAllocator* allocator, mfxU32 num_surfaces, mfxFrameSurface1* surfaces);
+mfxStatus MFXMemory_ReleaseSurfaces(mfxU32 num_surfaces, mfxFrameSurface1* surfaces);
+
+mfxStatus MFXMemory_LockSurface(mfxFrameSurface1* surface, mfxU32 flags);
+mfxStatus MFXMemory_UnlockSurface(mfxFrameSurface1* surface);
+mfxStatus MFXMemory_GetHandle(mfxFrameSurface1* surface, mfxU32 type, mfxHDL* hdl);
 
 // To distinguish between old and new DecodeFrameAsync behavior
 mfxStatus MFXVideoDECODE_DecodeFrameAsync_2(mfxSession session, mfxBitstream *bs, mfxFrameSurface1 *surface_work, mfxFrameSurface1 **surface_out, mfxSyncPoint *syncp);
