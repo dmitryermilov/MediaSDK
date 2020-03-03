@@ -6672,8 +6672,8 @@ mfxStatus CopyFrameDataBothFields(
 {
     dst.MemId = 0;
     src.MemId = 0;
-    mfxFrameSurface1 surfSrc = { {0,}, info, src };
-    mfxFrameSurface1 surfDst = { {0,}, info, dst };
+    mfxFrameSurface1 surfSrc = { {0,}, {}, info, src };
+    mfxFrameSurface1 surfDst = { {0,}, {}, info, dst };
 
     return core->DoFastCopyExtended(&surfDst, &surfSrc);
 

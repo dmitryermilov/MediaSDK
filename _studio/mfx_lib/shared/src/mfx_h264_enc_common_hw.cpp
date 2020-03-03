@@ -7012,8 +7012,8 @@ mfxStatus MfxHwH264Encode::CopyFrameDataBothFields(
     mfxFrameData const & src,
     mfxFrameInfo const & info)
 {
-    mfxFrameSurface1 surfSrc = { {0,}, info, src };
-    mfxFrameSurface1 surfDst = { {0,}, info, dst };
+    mfxFrameSurface1 surfSrc = { {0,}, {}, info, src };
+    mfxFrameSurface1 surfDst = { {0,}, {}, info, dst };
     return core->DoFastCopyWrapper(&surfDst,MFX_MEMTYPE_INTERNAL_FRAME|MFX_MEMTYPE_DXVA2_DECODER_TARGET|MFX_MEMTYPE_FROM_ENCODE, &surfSrc, MFX_MEMTYPE_EXTERNAL_FRAME|MFX_MEMTYPE_SYSTEM_MEMORY);
 }
 

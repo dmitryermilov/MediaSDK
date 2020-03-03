@@ -1814,8 +1814,8 @@ void Legacy::SubmitTask(const FeatureBlocks& /*blocks*/, TPushST Push)
                  && !(opaq.In.Type & MFX_MEMTYPE_SYSTEM_MEMORY)))
             , MFX_ERR_NONE);
 
-        mfxFrameSurface1 surfSrc = { {}, par.mfx.FrameInfo, task.pSurfReal->Data };
-        mfxFrameSurface1 surfDst = { {}, par.mfx.FrameInfo, {} };
+        mfxFrameSurface1 surfSrc = { {}, {}, par.mfx.FrameInfo, task.pSurfReal->Data };
+        mfxFrameSurface1 surfDst = { {}, {}, par.mfx.FrameInfo, {} };
         surfDst.Data.MemId = task.Raw.Mid;
 
         surfDst.Info.Shift =

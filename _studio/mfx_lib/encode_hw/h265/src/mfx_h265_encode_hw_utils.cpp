@@ -631,8 +631,8 @@ mfxStatus CopyRawSurfaceToVideoMemory(
         mfxFrameData sysSurf = surface->Data;
         d3dSurf.MemId = task.m_midRaw;
 
-        mfxFrameSurface1 surfSrc = { {}, video.mfx.FrameInfo, sysSurf };
-        mfxFrameSurface1 surfDst = { {}, video.mfx.FrameInfo, d3dSurf };
+        mfxFrameSurface1 surfSrc = { {}, {}, video.mfx.FrameInfo, sysSurf };
+        mfxFrameSurface1 surfDst = { {}, {}, video.mfx.FrameInfo, d3dSurf };
 
         if (surfDst.Info.FourCC == MFX_FOURCC_P010
 #if (MFX_VERSION >= 1027)
@@ -3844,8 +3844,8 @@ mfxStatus CodeAsSkipFrame(     VideoCORE &            core,
         dst.MemId = task.m_midRaw;
         src.MemId = refFrame.m_midRec;
 
-        mfxFrameSurface1 surfSrc = { {0,}, video.mfx.FrameInfo, src };
-        mfxFrameSurface1 surfDst = { {0,}, video.mfx.FrameInfo, dst };
+        mfxFrameSurface1 surfSrc = { {0,}, {}, video.mfx.FrameInfo, src };
+        mfxFrameSurface1 surfDst = { {0,}, {}, video.mfx.FrameInfo, dst };
 
         sts = core.DoFastCopyWrapper(&surfDst, MFX_MEMTYPE_INTERNAL_FRAME | MFX_MEMTYPE_DXVA2_DECODER_TARGET | MFX_MEMTYPE_FROM_ENCODE, &surfSrc, MFX_MEMTYPE_INTERNAL_FRAME | MFX_MEMTYPE_DXVA2_DECODER_TARGET | MFX_MEMTYPE_FROM_ENCODE);
         MFX_CHECK_STS(sts);

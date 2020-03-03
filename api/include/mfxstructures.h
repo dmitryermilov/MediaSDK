@@ -265,7 +265,8 @@ MFX_PACK_END()
 /* Frame Surface */
 MFX_PACK_BEGIN_STRUCT_W_L_TYPE()
 typedef struct {
-    mfxU32  reserved[4];
+    mfxU32  reserved[2];
+    mfxHDL          pthis;
     mfxFrameInfo    Info;
     mfxFrameData    Data;
 } mfxFrameSurface1;

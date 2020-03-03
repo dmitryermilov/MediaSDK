@@ -156,8 +156,8 @@ mfxStatus MfxHwMJpegEncode::FastCopyFrameBufferSys2Vid(
 
     {
         MFX_AUTO_LTRACE(MFX_TRACE_LEVEL_INTERNAL, "Copy input (sys->vid)");
-        mfxFrameSurface1 surfSrc = { {0,}, frmInfo, sysSurf };
-        mfxFrameSurface1 surfDst = { {0,}, frmInfo, vidSurf };
+        mfxFrameSurface1 surfSrc = { {0,}, {}, frmInfo, sysSurf };
+        mfxFrameSurface1 surfDst = { {0,}, {}, frmInfo, vidSurf };
         sts = core->DoFastCopyWrapper(&surfDst,MFX_MEMTYPE_INTERNAL_FRAME|MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET, &surfSrc,MFX_MEMTYPE_EXTERNAL_FRAME|MFX_MEMTYPE_SYSTEM_MEMORY);
         MFX_CHECK_STS(sts);
     }
