@@ -21,6 +21,9 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #include "sample_defs.h"
 #include <algorithm>
 
+#include <unistd.h>
+#include <sys/syscall.h>
+
 #if defined(_WIN32) || defined(_WIN64)
 #include <tchar.h>
 #include <windows.h>
@@ -1571,11 +1574,13 @@ mfxStatus CDecodingPipeline::DeliverOutput(mfxFrameSurface1* frame)
                 res = sts;
             }
         } else if (m_eWorkMode == MODE_RENDERING) {
+            printf("[%lu]     RenderFrame+ surface %p\n", syscall(SYS_gettid), frame); fflush(NULL);
 #if D3D_SURFACES_SUPPORT
             res = m_d3dRender.RenderFrame(frame, m_pGeneralAllocator);
 #elif LIBVA_SUPPORT
             res = m_hwdev->RenderFrame(frame, m_pGeneralAllocator);
 #endif
+            printf("[%lu]     RenderFrame- surface %p\n", syscall(SYS_gettid), frame); fflush(NULL);
 
             msdk_tick current_tick = msdk_time_get_tick();
             while( m_delayTicks && (m_startTick + m_delayTicks > current_tick) )
@@ -1636,12 +1641,14 @@ void CDecodingPipeline::PrintPerFrameStat(bool force)
         fps_fread = (m_tick_fread)? m_output_count/CTimer::ConvertToSeconds(m_tick_fread): 0.0;
         fps_fwrite = (m_tick_fwrite)? m_output_count/CTimer::ConvertToSeconds(m_tick_fwrite): 0.0;
         // decoding progress
+        #if 0
         msdk_printf(MSDK_STRING("Frame number: %4d, fps: %0.3f, fread_fps: %0.3f, fwrite_fps: %.3f\r"),
             m_output_count,
             fps,
             (fps_fread < MY_THRESHOLD)? fps_fread: 0.0,
             (fps_fwrite < MY_THRESHOLD)? fps_fwrite: 0.0);
         fflush(NULL);
+        #endif
 #if D3D_SURFACES_SUPPORT
         m_d3dRender.UpdateTitle(fps);
 #elif LIBVA_SUPPORT
@@ -1659,7 +1666,10 @@ mfxStatus CDecodingPipeline::SyncOutputSurface(mfxU32 wait)
         return MFX_ERR_MORE_DATA;
     }
 
+    mfxFrameSurface1* frame = &(m_pCurrentOutputSurface->surface->frame);
+    printf("[%lu] SyncOperation+ surface %p\n", syscall(SYS_gettid), frame); fflush(NULL);
     mfxStatus sts = m_mfxSession.SyncOperation(m_pCurrentOutputSurface->syncp, wait);
+    printf("[%lu] SyncOperation- surface %p\n", syscall(SYS_gettid), frame); fflush(NULL);
 
     if (MFX_ERR_GPU_HANG == sts && m_bSoftRobustFlag) {
         msdk_printf(MSDK_STRING("GPU hang happened\n"));
@@ -1834,7 +1844,9 @@ mfxStatus CDecodingPipeline::RunDecoding()
                     errorReport = (mfxExtDecodeErrorReport *)GetExtBuffer(pBitstream->ExtParam, pBitstream->NumExtParam, MFX_EXTBUFF_DECODE_ERROR_REPORT);
                 }
 #endif
+                printf("[%lu] DecodeFrameAsync+ in surface %p\n", syscall(SYS_gettid), &(m_pCurrentFreeSurface->frame)); fflush(NULL);
                 sts = m_pmfxDEC->DecodeFrameAsync(pBitstream, &(m_pCurrentFreeSurface->frame), &pOutSurface, &(m_pCurrentFreeOutputSurface->syncp));
+                printf("[%lu] DecodeFrameAsync- sts %d, out surface %p\n", syscall(SYS_gettid), sts, pOutSurface); fflush(NULL);
 
 #if (MFX_VERSION >= 1025)
                 PrintDecodeErrorReport(errorReport);
@@ -1960,7 +1972,9 @@ mfxStatus CDecodingPipeline::RunDecoding()
 
                         // WA: RunFrameVPPAsync doesn't copy ViewId from input to output
                         m_pCurrentFreeVppSurface->frame.Info.FrameId.ViewId = pOutSurface->Info.FrameId.ViewId;
+                        printf("[%lu] RunFrameVPPAsync+ in surface %p, out surface %p\n", syscall(SYS_gettid), pOutSurface, &(m_pCurrentFreeVppSurface->frame)); fflush(NULL);
                         sts = m_pmfxVPP->RunFrameVPPAsync(pOutSurface, &(m_pCurrentFreeVppSurface->frame), NULL, &(m_pCurrentFreeOutputSurface->syncp));
+                        printf("[%lu] RunFrameVPPAsync- in surface %p, out surface %p\n", syscall(SYS_gettid), pOutSurface, &(m_pCurrentFreeVppSurface->frame)); fflush(NULL);
 
                         if (MFX_WRN_DEVICE_BUSY == sts)
                         {
