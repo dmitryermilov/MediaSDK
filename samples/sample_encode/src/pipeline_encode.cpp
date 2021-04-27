@@ -486,7 +486,9 @@ mfxStatus CEncodingPipeline::InitMfxEncParams(sInputParams *pInParams)
     // frame info parameters
     m_mfxEncParams.mfx.FrameInfo.FourCC       = pInParams->EncodeFourCC;
     m_mfxEncParams.mfx.FrameInfo.ChromaFormat = FourCCToChroma(pInParams->EncodeFourCC);
-    m_mfxEncParams.mfx.FrameInfo.PicStruct    = pInParams->nPicStruct;
+    m_mfxEncParams.mfx.FrameInfo.PicStruct    = pInParams->CodecId == MFX_CODEC_HEVC ?
+        pInParams->nPicStruct | MFX_PICSTRUCT_FIELD_SINGLE :
+        pInParams->nPicStruct;
     m_mfxEncParams.mfx.FrameInfo.Shift        = pInParams->shouldUseShifted10BitEnc;
 
     // width must be a multiple of 16
@@ -2217,6 +2219,13 @@ mfxStatus CEncodingPipeline::Run()
             sts = InitEncFrameParams(pCurrentTask);
             MSDK_CHECK_STATUS(sts, "ENCODE: InitEncFrameParams failed");
 
+            if ((m_pEncSurfaces[nEncSurfIdx].Info.PicStruct & MFX_PICSTRUCT_FIELD_SINGLE) && m_mfxEncParams.mfx.CodecId == MFX_CODEC_HEVC)
+            {
+                // If mfxFrameSurface1::mfxFrameInfo::PicStruct is zero for a particular surface
+                // then encode will internally use MFX_PICSTRUCT_FIELD_TOP or MFX_PICSTRUCT_FIELD_BOTTOM
+                // for that surface depending on initialization picture structure and expected field polarity
+                m_pEncSurfaces[nEncSurfIdx].Info.PicStruct = 0;
+            }
             // at this point surface for encoder contains either a frame from file or a frame processed by vpp
             sts = m_pmfxENC->EncodeFrameAsync(pCtrl, &m_pEncSurfaces[nEncSurfIdx], &pCurrentTask->mfxBS, &pCurrentTask->EncSyncP);
 
@@ -2311,6 +2320,14 @@ mfxStatus CEncodingPipeline::Run()
                 if (!m_bQPFileMode)
                     InsertIDR(pCurrentTask->encCtrl, m_bInsertIDR);
                 m_bInsertIDR = false;
+
+                if ((m_pEncSurfaces[nEncSurfIdx].Info.PicStruct & MFX_PICSTRUCT_FIELD_SINGLE) && m_mfxEncParams.mfx.CodecId == MFX_CODEC_HEVC)
+                {
+                    // If mfxFrameSurface1::mfxFrameInfo::PicStruct is zero for a particular surface
+                    // then encode will internally use MFX_PICSTRUCT_FIELD_TOP or MFX_PICSTRUCT_FIELD_BOTTOM
+                    // for that surface depending on initialization picture structure and expected field polarity
+                    m_pEncSurfaces[nEncSurfIdx].Info.PicStruct = 0;
+                }
 
                 sts = m_pmfxENC->EncodeFrameAsync(pCtrl, &m_pEncSurfaces[nEncSurfIdx], &pCurrentTask->mfxBS, &pCurrentTask->EncSyncP);
 
